@@ -163,7 +163,7 @@
         <label for="destinatario">Invia a (email ditta)</label>
         <input id="destinatario" type="email" inputmode="email" placeholder="ufficio@ditta.it" autocomplete="off">
       </div>
-      <p class="hintline">Salvato una volta. Su "Genera e invia" apre l'email già indirizzata a questo destinatario.</p>
+      <p class="hintline">Salvato una volta. Il tasto "Invia email alla ditta" apre la posta già indirizzata a questo destinatario, con l'xlsx allegato.</p>
       <div class="field">
         <label for="ragione">Intestazione ditta (testo, provvisorio)</label>
         <input id="ragione" type="text" placeholder="Ragione sociale" autocomplete="off">
@@ -179,10 +179,13 @@
   <datalist id="descList"></datalist>
 </div>
 
-<div class="bar"><div class="bar-inner">
-  <button class="btn btn-ghost" id="btnDownload">Scarica</button>
-  <button class="btn btn-primary" id="btnSend">Genera e invia</button>
-</div></div>
+<div class="bar">
+  <div class="bar-inner"><button class="btn btn-primary" id="btnEmail">Invia email alla ditta</button></div>
+  <div class="bar-inner" style="margin-top:8px">
+    <button class="btn btn-ghost" id="btnSend">Condividi</button>
+    <button class="btn btn-ghost" id="btnDownload">Scarica</button>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -367,6 +370,25 @@ async function doShare(){
   }catch(e){toast('Errore: '+e.message,true);}
   finally{btn.disabled=false;btn.textContent='Genera e invia';}
 }
+async function doEmail(){
+  const d=collect();if(!validate(d))return;
+  const btn=$('btnEmail');btn.disabled=true;btn.textContent='Genero…';
+  try{
+    const blob=await buildBlob(d);const name=fileBase(d.iso)+'.xlsx';persist(d);
+    const P=window.Capacitor&&window.Capacitor.Plugins;
+    if(isNative()&&P&&P.EmailComposer){
+      const data=await blobB64(blob);
+      await P.EmailComposer.open({to:d.destinatario?[d.destinatario]:[],
+        subject:'Rapportino '+ddmmyy(d.iso)+' - '+d.cantiere,body:mailBody(d),
+        attachments:[{type:'base64',path:data,name:name}]});
+    }else{
+      download(blob,name);
+      if(d.destinatario){openMail(d);toast('File scaricato — allega all\'email aperta');}
+      else{toast('Imposta il destinatario nelle impostazioni');}
+    }
+  }catch(e){toast('Errore email: '+e.message,true);}
+  finally{btn.disabled=false;btn.textContent='Invia email alla ditta';}
+}
 async function doDownload(){
   const d=collect();if(!validate(d))return;
   try{const blob=await buildBlob(d);persist(d);download(blob,fileBase(d.iso)+'.xlsx');toast('File scaricato');}
@@ -390,6 +412,7 @@ function init(){
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
   $('btnAddRow').addEventListener('click',()=>addRow());
+  $('btnEmail').addEventListener('click',doEmail);
   $('btnSend').addEventListener('click',doShare);
   $('btnDownload').addEventListener('click',doDownload);
   $('btnReset').addEventListener('click',()=>{if(confirm('Svuotare il report? (dipendente e cantiere restano)'))newReport();});
