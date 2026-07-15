@@ -173,14 +173,19 @@
   <details class="card" id="arch">
     <summary><span>Archivio e riepilogo mensile</span><span class="chev">&#9662;</span></summary>
     <div class="body">
-      <div class="field">
+      <div class="field" id="meseField">
         <label for="mese">Mese</label>
         <input id="mese" type="month">
+      </div>
+      <label class="switch"><input type="checkbox" id="periodOn"><span class="track"></span><span class="swlabel">Periodo personalizzato</span></label>
+      <div class="two" id="periodFields" style="display:none">
+        <div class="field"><label for="dal">Dal</label><input id="dal" type="date"></div>
+        <div class="field"><label for="al">Al</label><input id="al" type="date"></div>
       </div>
       <div id="archList"></div>
       <div class="asum" id="archSum"></div>
       <button class="addrow" id="btnSaveDay" style="margin-top:12px">Salva questo giorno in archivio</button>
-      <button class="btn btn-primary" id="btnMonth" style="width:100%;margin-top:10px">Genera riepilogo mensile</button>
+      <button class="btn btn-primary" id="btnMonth" style="width:100%;margin-top:10px">Genera riepilogo</button>
     </div>
   </details>
 
@@ -457,7 +462,16 @@ function saveDay(d){
   saveArch(a);renderArch();
 }
 function delDay(iso){const a=loadArch();delete a[iso];saveArch(a);renderArch();toast('Giorno rimosso');}
-function archMonth(m){return Object.values(loadArch()).filter(x=>x.iso.slice(0,7)===m)
+function fmtIt(iso){const p=iso.split('-');return p[2]+'/'+p[1]+'/'+p[0].slice(2);}
+function activeRange(){
+  if($('periodOn')&&$('periodOn').checked){
+    const f=$('dal').value||todayISO(),t=$('al').value||todayISO();
+    return f<=t?{from:f,to:t,custom:true}:{from:t,to:f,custom:true};
+  }
+  const m=$('mese').value||todayISO().slice(0,7);
+  return {from:m+'-01',to:m+'-31',custom:false,month:m};
+}
+function archRange(r){return Object.values(loadArch()).filter(x=>x.iso>=r.from&&x.iso<=r.to)
   .sort((p,q)=>p.iso<q.iso?-1:1);}
 function loadDay(iso){
   const d=loadArch()[iso];if(!d)return;
@@ -478,9 +492,11 @@ function loadDay(iso){
   window.scrollTo({top:0,behavior:'smooth'});toast('Giorno caricato');
 }
 function renderArch(){
-  const m=$('mese').value||todayISO().slice(0,7);
-  const days=archMonth(m);const list=$('archList');
-  if(!days.length){list.innerHTML='<div class="aempty">Nessun giorno salvato in questo mese</div>';
+  const r=activeRange();
+  const days=archRange(r);const list=$('archList');
+  $('meseField').style.display=r.custom?'none':'block';
+  $('periodFields').style.display=r.custom?'flex':'none';
+  if(!days.length){list.innerHTML='<div class="aempty">Nessun giorno salvato in questo periodo</div>';
     $('archSum').innerHTML='';return;}
   let tot=0,str=0;
   list.innerHTML=days.map(d=>{
@@ -500,108 +516,117 @@ function renderArch(){
     row.querySelector('.adel').addEventListener('click',()=>{if(confirm('Eliminare il giorno '+iso+' dall\'archivio?'))delDay(iso);});
   });
   const ord=+(tot-str).toFixed(2);
-  $('archSum').innerHTML='<div class="big"><span>Totale ore mese</span><b>'+(+tot.toFixed(2))+'</b></div>'+
+  $('archSum').innerHTML='<div class="big"><span>Totale ore'+(r.custom?' periodo':' mese')+'</span><b>'+(+tot.toFixed(2))+'</b></div>'+
     '<div><span>Ore ordinarie</span><b>'+ord+'</b></div>'+
     '<div class="str"><span>Straordinari</span><b>'+(+str.toFixed(2))+'</b></div>'+
     '<div><span>Giorni lavorati</span><b>'+days.length+'</b></div>';
 }
-async function buildMonthly(m){
-  const days=archMonth(m);
+async function buildMonthly(r){
+  const days=archRange(r);
   const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Riepilogo');
   ws.getColumn(1).width=2.7;ws.getColumn(2).width=13;ws.getColumn(3).width=40;
   ws.getColumn(4).width=9;ws.getColumn(5).width=13;
   try{const _img=wb.addImage({base64:LOGO_B64,extension:'jpeg'});
     ws.getRow(1).height=20;ws.getRow(2).height=20;ws.getRow(3).height=20;
     ws.addImage(_img,{tl:{col:1.5,row:0.15},ext:{width:83,height:55},editAs:'oneCell'});}catch(e){}
-  const parts=m.split('-');const yy=parts[0],mm=parts[1];
-  let r=4,c;
-  ws.mergeCells('B4:E4');c=ws.getCell('B4');c.value='RIEPILOGO MENSILE';
+  let rr=4,c;
+  ws.mergeCells('B4:E4');c=ws.getCell('B4');c.value=r.custom?'RIEPILOGO PERIODO':'RIEPILOGO MENSILE';
   c.font={name:'Calibri',size:14,bold:true};c.alignment={horizontal:'center'};c.border=box;grey(c);
   ws.getRow(4).height=24;
-  r=5;
   ws.mergeCells('B5:C5');c=ws.getCell('B5');c.value='Dipendente: '+((days[0]&&days[0].dipendente)||'');
   c.font={name:'Calibri',size:11,bold:true};c.border=box;
-  ws.mergeCells('D5:E5');c=ws.getCell('D5');c.value='Mese: '+MESI[Number(mm)-1]+' '+yy;
+  const pm=(r.month||'').split('-');
+  ws.mergeCells('D5:E5');c=ws.getCell('D5');
+  c.value=r.custom?('Periodo: '+fmtIt(r.from)+' \u2013 '+fmtIt(r.to)):('Mese: '+MESI[Number(pm[1])-1]+' '+pm[0]);
   c.font={name:'Calibri',size:11,bold:true};c.alignment={horizontal:'center'};c.border=box;
   ws.getRow(5).height=20;
-  r=7;
+  rr=7;
   [['B','Data','left'],['C','Cantiere / lavori','left'],['D','ORE','center'],['E','di cui straord.','center']]
-    .forEach(function(x){const cc=ws.getCell(x[0]+r);cc.value=x[1];
+    .forEach(function(x){const cc=ws.getCell(x[0]+rr);cc.value=x[1];
       cc.font={name:'Calibri',size:11,bold:true};cc.alignment={horizontal:x[2]};cc.border=box;grey(cc);});
-  ws.getRow(r).height=21;r++;
+  ws.getRow(rr).height=21;rr++;
   let tot=0,str=0;const perCant={};
   days.forEach(function(d){
     const s=strOf(d.tot);tot+=Number(d.tot)||0;str+=s;
     const p=d.iso.split('-');
-    let cc=ws.getCell('B'+r);cc.value=p[2]+'/'+p[1]+'/'+p[0].slice(2);
+    let cc=ws.getCell('B'+rr);cc.value=p[2]+'/'+p[1]+'/'+p[0].slice(2);
     cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'left'};cc.border=box;
-    cc=ws.getCell('C'+r);cc.value=d.cantiere||'';cc.font={name:'Calibri',size:11};
+    cc=ws.getCell('C'+rr);cc.value=d.cantiere||'';cc.font={name:'Calibri',size:11};
     cc.alignment={horizontal:'left',wrapText:true};cc.border=box;
-    cc=ws.getCell('D'+r);cc.value=+(Number(d.tot)||0).toFixed(2);
+    cc=ws.getCell('D'+rr);cc.value=+(Number(d.tot)||0).toFixed(2);
     cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'center'};cc.border=box;
-    cc=ws.getCell('E'+r);
+    cc=ws.getCell('E'+rr);
     if(s>0){cc.value=s;cc.font={name:'Calibri',size:11,bold:true,color:{argb:'FFCC0000'}};
       cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFD6D6'}};}
     else{cc.font={name:'Calibri',size:11};}
     cc.alignment={horizontal:'center'};cc.border=box;
-    ws.getRow(r).height=19;r++;
+    ws.getRow(rr).height=19;rr++;
     if(d.multi&&d.raw&&d.raw.length){
       d.raw.forEach(function(x){const k=(x.cant||d.cantiere||'—');
         perCant[k]=(perCant[k]||0)+(parseFloat(x.ore)||0);});
     }else{const k=d.cantiere||'—';perCant[k]=(perCant[k]||0)+(Number(d.tot)||0);}
   });
-  ws.mergeCells('B'+r+':C'+r);c=ws.getCell('B'+r);c.value='TOTALE MESE';
+  ws.mergeCells('B'+rr+':C'+rr);c=ws.getCell('B'+rr);c.value=r.custom?'TOTALE PERIODO':'TOTALE MESE';
   c.font={name:'Calibri',size:12,bold:true};c.alignment={horizontal:'right'};c.border=box;grey(c);
-  c=ws.getCell('D'+r);c.value=+tot.toFixed(2);c.font={name:'Calibri',size:14,bold:true};
+  c=ws.getCell('D'+rr);c.value=+tot.toFixed(2);c.font={name:'Calibri',size:14,bold:true};
   c.alignment={horizontal:'center'};c.border=box;grey(c);
-  c=ws.getCell('E'+r);c.value=+str.toFixed(2);
+  c=ws.getCell('E'+rr);c.value=+str.toFixed(2);
   c.font={name:'Calibri',size:14,bold:true,color:{argb:'FFCC0000'}};
   c.alignment={horizontal:'center'};c.border=box;grey(c);
-  ws.getRow(r).height=24;r+=2;
+  ws.getRow(rr).height=24;rr+=2;
   [['Giorni lavorati',days.length],['Ore ordinarie',+(tot-str).toFixed(2)],
    ['Ore straordinarie',+str.toFixed(2)]].forEach(function(x){
-    ws.mergeCells('B'+r+':C'+r);const a=ws.getCell('B'+r);a.value=x[0]+':';
+    ws.mergeCells('B'+rr+':C'+rr);const a=ws.getCell('B'+rr);a.value=x[0]+':';
     a.font={name:'Calibri',size:11,bold:true};a.alignment={horizontal:'right'};
-    const b=ws.getCell('D'+r);b.value=x[1];b.font={name:'Calibri',size:11,bold:true};
-    b.alignment={horizontal:'center'};ws.getRow(r).height=18;r++;});
-  r++;
-  ws.mergeCells('B'+r+':E'+r);c=ws.getCell('B'+r);c.value='RIEPILOGO PER CANTIERE';
-  c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);ws.getRow(r).height=20;r++;
+    const b=ws.getCell('D'+rr);b.value=x[1];b.font={name:'Calibri',size:11,bold:true};
+    b.alignment={horizontal:'center'};ws.getRow(rr).height=18;rr++;});
+  rr++;
+  ws.mergeCells('B'+rr+':E'+rr);c=ws.getCell('B'+rr);c.value='RIEPILOGO PER CANTIERE';
+  c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);ws.getRow(rr).height=20;rr++;
   Object.keys(perCant).sort(function(a,b){return perCant[b]-perCant[a];}).forEach(function(k){
-    ws.mergeCells('B'+r+':C'+r);const a=ws.getCell('B'+r);a.value=k;
+    ws.mergeCells('B'+rr+':C'+rr);const a=ws.getCell('B'+rr);a.value=k;
     a.font={name:'Calibri',size:11};a.alignment={horizontal:'left'};a.border=box;
-    const b=ws.getCell('D'+r);b.value=+perCant[k].toFixed(2);
+    const b=ws.getCell('D'+rr);b.value=+perCant[k].toFixed(2);
     b.font={name:'Calibri',size:11};b.alignment={horizontal:'center'};b.border=box;
-    const e=ws.getCell('E'+r);e.border=box;
-    ws.getRow(r).height=18;r++;});
+    const e=ws.getCell('E'+rr);e.border=box;
+    ws.getRow(rr).height=18;rr++;});
   const buf=await wb.xlsx.writeBuffer();
   return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
 async function doMonth(){
-  const m=$('mese').value||todayISO().slice(0,7);
-  const days=archMonth(m);
-  if(!days.length){toast('Nessun giorno salvato in questo mese',true);return;}
+  const r=activeRange();
+  const days=archRange(r);
+  if(!days.length){toast('Nessun giorno salvato in questo periodo',true);return;}
   const btn=$('btnMonth');btn.disabled=true;btn.textContent='Genero\u2026';
   try{
-    const blob=await buildMonthly(m);
-    const parts=m.split('-');const nm=slugDip();
-    const name=(nm?nm+'.':'')+'riepilogo.'+parts[1]+parts[0].slice(2)+'.xlsx';
-    const title='Riepilogo '+MESI[Number(parts[1])-1]+' '+parts[0];
+    const blob=await buildMonthly(r);
+    const nm=slugDip();let name,title;
+    if(r.custom){
+      name=(nm?nm+'.':'')+'riepilogo.'+ddmmyy(r.from)+'-'+ddmmyy(r.to)+'.xlsx';
+      title='Riepilogo '+fmtIt(r.from)+' - '+fmtIt(r.to);
+    }else{
+      const p=r.month.split('-');
+      name=(nm?nm+'.':'')+'riepilogo.'+p[1]+p[0].slice(2)+'.xlsx';
+      title='Riepilogo '+MESI[Number(p[1])-1]+' '+p[0];
+    }
     if(isNative()){
       const P=window.Capacitor.Plugins;const data=await blobB64(blob);
-      const w=await P.Filesystem.writeFile({path:name,data:data,directory:'CACHE'});
-      await P.Share.share({title:title,text:title,files:[w.uri],dialogTitle:'Invia riepilogo'});
+      try{
+        const w=await P.Filesystem.writeFile({path:name,data:data,directory:'CACHE',recursive:true});
+        await P.Share.share({title:title,files:[w.uri],dialogTitle:'Invia riepilogo'});
+      }catch(e){const msg=errMsg(e);if(!/cancel/i.test(msg)){LS.set('diagErr','share riepilogo: '+msg);
+        alert('Invio riepilogo non riuscito.\n\nErrore: '+msg+'\n\nUsa \'Scarica\' e allega a mano.');}}
     }else{
       const file=new File([blob],name,{type:blob.type});
       let done=false;
       if(navigator.canShare&&navigator.canShare({files:[file]})){
-        try{await navigator.share({files:[file],title:title,text:title});done=true;}
+        try{await navigator.share({files:[file],title:title});done=true;}
         catch(e){if(e.name==='AbortError')done=true;}
       }
       if(!done){download(blob,name);toast('Riepilogo scaricato');}
     }
   }catch(e){toast('Errore: '+e.message,true);}
-  finally{btn.disabled=false;btn.textContent='Genera riepilogo mensile';}
+  finally{btn.disabled=false;btn.textContent='Genera riepilogo';}
 }
 function doSaveDay(){
   const d=collect();if(!validate(d))return;
@@ -628,6 +653,10 @@ function init(){
   $('soglia').value=LS.get('soglia',8);
   $('mese').value=todayISO().slice(0,7);
   $('mese').addEventListener('change',renderArch);
+  $('dal').value=todayISO().slice(0,8)+'01';$('al').value=todayISO();
+  $('periodOn').addEventListener('change',renderArch);
+  $('dal').addEventListener('change',renderArch);
+  $('al').addEventListener('change',renderArch);
   $('soglia').addEventListener('input',renderArch);
   $('btnSaveDay').addEventListener('click',doSaveDay);
   $('btnMonth').addEventListener('click',doMonth);
