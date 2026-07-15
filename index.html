@@ -88,6 +88,20 @@
   .btn-ghost{background:var(--surface-2);color:var(--text);border:1px solid var(--line)}
   .btn-ghost:active{background:var(--surface)}
   .btn:disabled{opacity:.5}
+.arow{display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:.85rem}
+  .arow .dd{width:56px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+  .arow .cn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .arow .hh{width:42px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;flex:none}
+  .arow .ss{width:40px;text-align:right;color:var(--danger);font-size:.76rem;font-variant-numeric:tabular-nums;flex:none}
+  .arow button{flex:none;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);
+    border-radius:8px;width:30px;height:30px;font-size:.85rem;line-height:1;cursor:pointer;padding:0}
+  .arow button.adel:active{background:var(--danger);color:#fff}
+  .aempty{color:var(--muted);font-size:.85rem;padding:12px 2px;text-align:center}
+  .asum{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .asum div{display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0}
+  .asum .big{font-size:1.05rem;font-weight:800}
+  .asum b{color:var(--hv);font-variant-numeric:tabular-nums}
+  .asum .str b{color:var(--danger)}
   .toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
   .reset{background:none;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;text-decoration:underline;font-family:inherit}
   .toast{position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-160%);
@@ -156,12 +170,30 @@
     </div>
   </div>
 
+  <details class="card" id="arch">
+    <summary><span>Archivio e riepilogo mensile</span><span class="chev">&#9662;</span></summary>
+    <div class="body">
+      <div class="field">
+        <label for="mese">Mese</label>
+        <input id="mese" type="month">
+      </div>
+      <div id="archList"></div>
+      <div class="asum" id="archSum"></div>
+      <button class="addrow" id="btnSaveDay" style="margin-top:12px">Salva questo giorno in archivio</button>
+      <button class="btn btn-primary" id="btnMonth" style="width:100%;margin-top:10px">Genera riepilogo mensile</button>
+    </div>
+  </details>
+
   <details class="card" id="settings">
     <summary><span>Impostazioni ditta e invio</span><span class="chev">▾</span></summary>
     <div class="body">
       <div class="field">
         <label for="destinatario">Invia a (email ditta)</label>
         <input id="destinatario" type="email" inputmode="email" placeholder="ufficio@ditta.it" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="soglia">Ore ordinarie al giorno (oltre = straordinario)</label>
+        <input id="soglia" type="number" step="0.5" min="0" value="8">
       </div>
       <p class="hintline">Salvato una volta. Il tasto "Invia email alla ditta" apre la posta già indirizzata a questo destinatario, con l'xlsx allegato.</p>
       <div class="field">
@@ -312,7 +344,8 @@ function collect(){
     dateObj:new Date(Number(y),Number(m)-1,Number(dd)),iso,righe,tot:totVal,
     squadra:normCol($('squadra').value),
     firma:$('firma').value.trim(),note:$('note').value.trim(),
-    destinatario:$('destinatario').value.trim(),ragione:$('ragione').value.trim(),sub:$('sub').value.trim()};
+    destinatario:$('destinatario').value.trim(),ragione:$('ragione').value.trim(),sub:$('sub').value.trim(),
+    raw:raw,multi:multi};
 }
 function persist(d){
   LS.set('dipendente',d.dipendente);LS.set('firma',d.firma);LS.set('lastCantiere',d.cantiere);
@@ -324,6 +357,8 @@ function persist(d){
   [...document.querySelectorAll('#rows .colleghi')].forEach(i=>normCol(i.value).split(', ').forEach(n=>{if(n)remember('colleghi',n);}));
   fillColleghi();
   fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');
+  LS.set('soglia',Number($('soglia').value)||8);
+  saveDay(d);
 }
 function validate(d){
   if(!d.dipendente){toast('Manca il dipendente',true);return false;}
@@ -393,6 +428,170 @@ async function doDownload(){
   try{const blob=await buildBlob(d);persist(d);download(blob,fileBase(d.iso)+'.xlsx');toast('File scaricato');}
   catch(e){toast('Errore: '+e.message,true);}
 }
+/* ---------- archivio mensile ---------- */
+const MESI=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+function loadArch(){return LS.get('archivio',{});}
+function saveArch(a){LS.set('archivio',a);}
+function soglia(){return Number(LS.get('soglia',8))||8;}
+function strOf(tot){return Math.max(0,+((Number(tot)||0)-soglia()).toFixed(2));}
+function saveDay(d){
+  if(!d.iso)return;
+  const a=loadArch();
+  a[d.iso]={iso:d.iso,dipendente:d.dipendente,cantiere:d.cantiere,tot:d.tot,
+    squadra:d.squadra,note:d.note,raw:d.raw,multi:d.multi};
+  saveArch(a);renderArch();
+}
+function delDay(iso){const a=loadArch();delete a[iso];saveArch(a);renderArch();toast('Giorno rimosso');}
+function archMonth(m){return Object.values(loadArch()).filter(x=>x.iso.slice(0,7)===m)
+  .sort((p,q)=>p.iso<q.iso?-1:1);}
+function loadDay(iso){
+  const d=loadArch()[iso];if(!d)return;
+  $('data').value=d.iso;updateFileName();
+  if(d.dipendente)$('dipendente').value=d.dipendente;
+  $('multiCant').checked=!!d.multi;setMulti(!!d.multi);
+  if(!d.multi)$('cantiere').value=d.cantiere||'';
+  $('squadra').value=d.squadra||'';$('note').value=d.note||'';
+  $('rows').innerHTML='';
+  (d.raw||[]).forEach(r=>{
+    addRow(r.desc||'',r.ore||'',r.cant||'',r.colleghi||'');
+    const fl=$('rows').lastElementChild.querySelector('.flag');
+    fl.dataset.tipo=r.tipo||'';
+    fl.textContent=r.tipo==='variante'?'Var':(r.tipo==='urgente'?'Urg':'\u2014');
+  });
+  ensureRow();totManual=false;recalcTot();
+  if(d.tot!=null&&d.tot!=='')$('tot').value=d.tot;
+  window.scrollTo({top:0,behavior:'smooth'});toast('Giorno caricato');
+}
+function renderArch(){
+  const m=$('mese').value||todayISO().slice(0,7);
+  const days=archMonth(m);const list=$('archList');
+  if(!days.length){list.innerHTML='<div class="aempty">Nessun giorno salvato in questo mese</div>';
+    $('archSum').innerHTML='';return;}
+  let tot=0,str=0;
+  list.innerHTML=days.map(d=>{
+    const s=strOf(d.tot);tot+=Number(d.tot)||0;str+=s;
+    const p=d.iso.split('-');
+    return '<div class="arow" data-iso="'+d.iso+'">'+
+      '<span class="dd">'+p[2]+'/'+p[1]+'</span>'+
+      '<span class="cn">'+(d.cantiere||'').replace(/</g,'&lt;')+'</span>'+
+      '<span class="hh">'+(+(Number(d.tot)||0).toFixed(2))+'</span>'+
+      '<span class="ss">'+(s>0?('+'+s):'')+'</span>'+
+      '<button class="aload" title="Carica">&#8635;</button>'+
+      '<button class="adel" title="Elimina">&times;</button></div>';
+  }).join('');
+  [...list.querySelectorAll('.arow')].forEach(row=>{
+    const iso=row.dataset.iso;
+    row.querySelector('.aload').addEventListener('click',()=>loadDay(iso));
+    row.querySelector('.adel').addEventListener('click',()=>{if(confirm('Eliminare il giorno '+iso+' dall\'archivio?'))delDay(iso);});
+  });
+  const ord=+(tot-str).toFixed(2);
+  $('archSum').innerHTML='<div class="big"><span>Totale ore mese</span><b>'+(+tot.toFixed(2))+'</b></div>'+
+    '<div><span>Ore ordinarie</span><b>'+ord+'</b></div>'+
+    '<div class="str"><span>Straordinari</span><b>'+(+str.toFixed(2))+'</b></div>'+
+    '<div><span>Giorni lavorati</span><b>'+days.length+'</b></div>';
+}
+async function buildMonthly(m){
+  const days=archMonth(m);
+  const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Riepilogo');
+  ws.getColumn(1).width=2.7;ws.getColumn(2).width=13;ws.getColumn(3).width=40;
+  ws.getColumn(4).width=9;ws.getColumn(5).width=13;
+  try{const _img=wb.addImage({base64:LOGO_B64,extension:'jpeg'});
+    ws.getRow(1).height=20;ws.getRow(2).height=20;ws.getRow(3).height=20;
+    ws.addImage(_img,{tl:{col:1.5,row:0.15},ext:{width:83,height:55},editAs:'oneCell'});}catch(e){}
+  const parts=m.split('-');const yy=parts[0],mm=parts[1];
+  let r=4,c;
+  ws.mergeCells('B4:E4');c=ws.getCell('B4');c.value='RIEPILOGO MENSILE';
+  c.font={name:'Calibri',size:14,bold:true};c.alignment={horizontal:'center'};c.border=box;grey(c);
+  ws.getRow(4).height=24;
+  r=5;
+  ws.mergeCells('B5:C5');c=ws.getCell('B5');c.value='Dipendente: '+((days[0]&&days[0].dipendente)||'');
+  c.font={name:'Calibri',size:11,bold:true};c.border=box;
+  ws.mergeCells('D5:E5');c=ws.getCell('D5');c.value='Mese: '+MESI[Number(mm)-1]+' '+yy;
+  c.font={name:'Calibri',size:11,bold:true};c.alignment={horizontal:'center'};c.border=box;
+  ws.getRow(5).height=20;
+  r=7;
+  [['B','Data','left'],['C','Cantiere / lavori','left'],['D','ORE','center'],['E','di cui straord.','center']]
+    .forEach(function(x){const cc=ws.getCell(x[0]+r);cc.value=x[1];
+      cc.font={name:'Calibri',size:11,bold:true};cc.alignment={horizontal:x[2]};cc.border=box;grey(cc);});
+  ws.getRow(r).height=21;r++;
+  let tot=0,str=0;const perCant={};
+  days.forEach(function(d){
+    const s=strOf(d.tot);tot+=Number(d.tot)||0;str+=s;
+    const p=d.iso.split('-');
+    let cc=ws.getCell('B'+r);cc.value=p[2]+'/'+p[1]+'/'+p[0].slice(2);
+    cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'left'};cc.border=box;
+    cc=ws.getCell('C'+r);cc.value=d.cantiere||'';cc.font={name:'Calibri',size:11};
+    cc.alignment={horizontal:'left',wrapText:true};cc.border=box;
+    cc=ws.getCell('D'+r);cc.value=+(Number(d.tot)||0).toFixed(2);
+    cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'center'};cc.border=box;
+    cc=ws.getCell('E'+r);
+    if(s>0){cc.value=s;cc.font={name:'Calibri',size:11,bold:true,color:{argb:'FFCC0000'}};
+      cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFD6D6'}};}
+    else{cc.font={name:'Calibri',size:11};}
+    cc.alignment={horizontal:'center'};cc.border=box;
+    ws.getRow(r).height=19;r++;
+    if(d.multi&&d.raw&&d.raw.length){
+      d.raw.forEach(function(x){const k=(x.cant||d.cantiere||'—');
+        perCant[k]=(perCant[k]||0)+(parseFloat(x.ore)||0);});
+    }else{const k=d.cantiere||'—';perCant[k]=(perCant[k]||0)+(Number(d.tot)||0);}
+  });
+  ws.mergeCells('B'+r+':C'+r);c=ws.getCell('B'+r);c.value='TOTALE MESE';
+  c.font={name:'Calibri',size:12,bold:true};c.alignment={horizontal:'right'};c.border=box;grey(c);
+  c=ws.getCell('D'+r);c.value=+tot.toFixed(2);c.font={name:'Calibri',size:14,bold:true};
+  c.alignment={horizontal:'center'};c.border=box;grey(c);
+  c=ws.getCell('E'+r);c.value=+str.toFixed(2);
+  c.font={name:'Calibri',size:14,bold:true,color:{argb:'FFCC0000'}};
+  c.alignment={horizontal:'center'};c.border=box;grey(c);
+  ws.getRow(r).height=24;r+=2;
+  [['Giorni lavorati',days.length],['Ore ordinarie',+(tot-str).toFixed(2)],
+   ['Ore straordinarie',+str.toFixed(2)]].forEach(function(x){
+    ws.mergeCells('B'+r+':C'+r);const a=ws.getCell('B'+r);a.value=x[0]+':';
+    a.font={name:'Calibri',size:11,bold:true};a.alignment={horizontal:'right'};
+    const b=ws.getCell('D'+r);b.value=x[1];b.font={name:'Calibri',size:11,bold:true};
+    b.alignment={horizontal:'center'};ws.getRow(r).height=18;r++;});
+  r++;
+  ws.mergeCells('B'+r+':E'+r);c=ws.getCell('B'+r);c.value='RIEPILOGO PER CANTIERE';
+  c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);ws.getRow(r).height=20;r++;
+  Object.keys(perCant).sort(function(a,b){return perCant[b]-perCant[a];}).forEach(function(k){
+    ws.mergeCells('B'+r+':C'+r);const a=ws.getCell('B'+r);a.value=k;
+    a.font={name:'Calibri',size:11};a.alignment={horizontal:'left'};a.border=box;
+    const b=ws.getCell('D'+r);b.value=+perCant[k].toFixed(2);
+    b.font={name:'Calibri',size:11};b.alignment={horizontal:'center'};b.border=box;
+    const e=ws.getCell('E'+r);e.border=box;
+    ws.getRow(r).height=18;r++;});
+  const buf=await wb.xlsx.writeBuffer();
+  return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+async function doMonth(){
+  const m=$('mese').value||todayISO().slice(0,7);
+  const days=archMonth(m);
+  if(!days.length){toast('Nessun giorno salvato in questo mese',true);return;}
+  const btn=$('btnMonth');btn.disabled=true;btn.textContent='Genero\u2026';
+  try{
+    const blob=await buildMonthly(m);
+    const parts=m.split('-');const nm=slugDip();
+    const name=(nm?nm+'.':'')+'riepilogo.'+parts[1]+parts[0].slice(2)+'.xlsx';
+    const title='Riepilogo '+MESI[Number(parts[1])-1]+' '+parts[0];
+    if(isNative()){
+      const P=window.Capacitor.Plugins;const data=await blobB64(blob);
+      const w=await P.Filesystem.writeFile({path:name,data:data,directory:'CACHE'});
+      await P.Share.share({title:title,text:title,files:[w.uri],dialogTitle:'Invia riepilogo'});
+    }else{
+      const file=new File([blob],name,{type:blob.type});
+      let done=false;
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        try{await navigator.share({files:[file],title:title,text:title});done=true;}
+        catch(e){if(e.name==='AbortError')done=true;}
+      }
+      if(!done){download(blob,name);toast('Riepilogo scaricato');}
+    }
+  }catch(e){toast('Errore: '+e.message,true);}
+  finally{btn.disabled=false;btn.textContent='Genera riepilogo mensile';}
+}
+function doSaveDay(){
+  const d=collect();if(!validate(d))return;
+  persist(d);$('mese').value=d.iso.slice(0,7);renderArch();toast('Giorno salvato in archivio');
+}
 function newReport(){
   $('rows').innerHTML='';addRow();addRow();addRow();
   $('data').value=todayISO();updateFileName();
@@ -411,6 +610,13 @@ function init(){
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
   $('btnAddRow').addEventListener('click',()=>addRow());
+  $('soglia').value=LS.get('soglia',8);
+  $('mese').value=todayISO().slice(0,7);
+  $('mese').addEventListener('change',renderArch);
+  $('soglia').addEventListener('input',renderArch);
+  $('btnSaveDay').addEventListener('click',doSaveDay);
+  $('btnMonth').addEventListener('click',doMonth);
+  renderArch();
   $('btnSend').addEventListener('click',doShare);
   $('btnDownload').addEventListener('click',doDownload);
   $('btnReset').addEventListener('click',()=>{if(confirm('Svuotare il report? (dipendente e cantiere restano)'))newReport();});
