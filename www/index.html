@@ -102,7 +102,9 @@
   .asum .big{font-size:1.05rem;font-weight:800}
   .asum b{color:var(--hv);font-variant-numeric:tabular-nums}
   .asum .str b{color:var(--danger)}
-  .toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .savestate{font-size:.76rem;color:var(--muted)}
+  .savestate.ok{color:var(--ok)}
   .reset{background:none;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;text-decoration:underline;font-family:inherit}
   .toast{position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-160%);
     background:var(--ok);color:#062015;padding:11px 18px;border-radius:10px;font-weight:700;font-size:.9rem;
@@ -119,7 +121,7 @@
     <span class="file-hint">file: <b id="fileName">—</b></span>
   </header>
 
-  <div class="toolbar"><button class="reset" id="btnReset">Nuovo report</button></div>
+  <div class="toolbar"><span class="savestate" id="saveState">salvataggio automatico attivo</span><button class="reset" id="btnReset">Nuovo report</button></div>
 
   <div class="card">
     <h2>Intestazione</h2>
@@ -473,7 +475,7 @@ function activeRange(){
 }
 function archRange(r){return Object.values(loadArch()).filter(x=>x.iso>=r.from&&x.iso<=r.to)
   .sort((p,q)=>p.iso<q.iso?-1:1);}
-function loadDay(iso){
+function loadDay(iso,silent){
   const d=loadArch()[iso];if(!d)return;
   $('data').value=d.iso;updateFileName();
   if(d.dipendente)$('dipendente').value=d.dipendente;
@@ -489,7 +491,7 @@ function loadDay(iso){
   });
   ensureRow();totManual=false;recalcTot();
   if(d.tot!=null&&d.tot!=='')$('tot').value=d.tot;
-  window.scrollTo({top:0,behavior:'smooth'});toast('Giorno caricato');
+  if(!silent){window.scrollTo({top:0,behavior:'smooth'});toast('Giorno caricato');}
 }
 function renderArch(){
   const r=activeRange();
@@ -632,6 +634,49 @@ function doSaveDay(){
   const d=collect();if(!validate(d))return;
   persist(d);$('mese').value=d.iso.slice(0,7);renderArch();toast('Giorno salvato in archivio');
 }
+/* ---------- salvataggio automatico ---------- */
+let _svT=null;
+function hasContent(){return getRows().some(function(r){return r.desc!==''||(r.ore!==''&&r.ore!=null);});}
+function markSaved(){
+  const n=new Date();
+  const hh=('0'+n.getHours()).slice(-2),mm=('0'+n.getMinutes()).slice(-2);
+  const el=$('saveState');el.textContent='salvato alle '+hh+':'+mm;el.className='savestate ok';
+  setTimeout(function(){el.className='savestate';},1500);
+}
+function flushSave(){
+  clearTimeout(_svT);
+  try{
+    if(!hasContent())return;
+    const d=collect();
+    if(!d.iso)return;
+    saveDay(d);markSaved();
+  }catch(e){}
+}
+function autosave(){clearTimeout(_svT);_svT=setTimeout(flushSave,700);}
+function wireAutosave(){
+  ['dipendente','cantiere','data','squadra','note','tot','firma','multiCant'].forEach(function(id){
+    const el=$(id);if(!el)return;
+    el.addEventListener('input',autosave);el.addEventListener('change',autosave);
+  });
+  $('rows').addEventListener('input',autosave);
+  $('rows').addEventListener('click',function(e){
+    if(e.target.classList&&(e.target.classList.contains('flag')||e.target.classList.contains('del')))autosave();
+  });
+  $('btnAddRow').addEventListener('click',autosave);
+  // salva subito quando l'app va in background o si chiude
+  document.addEventListener('visibilitychange',function(){if(document.hidden)flushSave();});
+  window.addEventListener('pagehide',flushSave);
+  window.addEventListener('blur',flushSave);
+}
+function restoreToday(){
+  const t=todayISO();
+  const d=loadArch()[t];
+  if(!d)return false;
+  loadDay(t,true);
+  addRow();   // riga vuota pronta per il prossimo intervento
+  $('saveState').textContent='ripresa giornata in corso';
+  return true;
+}
 function newReport(){
   $('rows').innerHTML='';addRow();addRow();addRow();
   $('data').value=todayISO();updateFileName();
@@ -649,6 +694,8 @@ function init(){
   addRow();addRow();addRow();
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
+  restoreToday();
+  wireAutosave();
   $('btnAddRow').addEventListener('click',()=>addRow());
   $('soglia').value=LS.get('soglia',8);
   $('mese').value=todayISO().slice(0,7);
