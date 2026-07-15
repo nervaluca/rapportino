@@ -41,6 +41,17 @@ npx cap open android      # apre Android Studio
 Per modificare l'app basta editare `www/index.html`; poi `npx cap sync android` e ricompilare.
 Su GitHub è sufficiente ricaricare `www/index.html` e lasciar ripartire il workflow.
 
+## Archivio e riepilogo mensile
+
+Ogni giorno generato viene salvato in automatico sul telefono (archivio locale).
+Nella sezione **Archivio e riepilogo mensile** si sceglie il mese, si vedono i giorni salvati
+con ore e straordinari, e con **Genera riepilogo mensile** si produce
+`nome.cognome.riepilogo.MMAA.xlsx` con: tabella giorno per giorno, totale ore, ore ordinarie,
+straordinari e riepilogo per cantiere.
+
+La soglia oltre la quale le ore diventano straordinario si imposta nelle impostazioni
+(default 8 ore/giorno). Ogni giorno in archivio si può ricaricare nel form (tasto ↻) o eliminare (×).
+
 ## Invio
 
 Su Android l'app scrive il file e apre il **foglio di condivisione nativo** con l'xlsx già allegato:
