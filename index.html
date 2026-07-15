@@ -205,6 +205,7 @@
         <input id="sub" type="text" placeholder="Via … — Città — P.IVA …" autocomplete="off">
       </div>
       <p class="hintline">Logo <b>Ten Solutions</b> gia incluso, piccolo in alto a sinistra su ogni file.</p>
+      <p class="hintline" id="diag" style="margin-top:10px"></p>
     </div>
   </details>
 
@@ -379,10 +380,29 @@ function download(blob,name){const url=URL.createObjectURL(blob);const a=documen
 
 function isNative(){return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}
 function blobB64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onloadend=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(blob);});}
+function errMsg(e){return String((e&&(e.message||e.errorMessage))||e);}
 async function nativeSend(blob,name,d){
   const P=window.Capacitor.Plugins;const data=await blobB64(blob);
-  const w=await P.Filesystem.writeFile({path:name,data:data,directory:'CACHE'});
-  await P.Share.share({title:'Rapportino '+d.iso,text:mailBody(d),files:[w.uri],dialogTitle:'Invia rapportino'});
+  let uri='';
+  try{
+    const w=await P.Filesystem.writeFile({path:name,data:data,directory:'CACHE',recursive:true});
+    uri=(w&&w.uri)||'';LS.set('diagUri',uri);
+  }catch(e){
+    LS.set('diagErr','writeFile: '+errMsg(e));
+    alert('Non riesco a salvare il file sul telefono.\n\nErrore: '+errMsg(e));
+    return;
+  }
+  try{
+    // NIENTE 'text': con il testo l'intent parte come "solo testo" e Gmail scarta l'allegato
+    await P.Share.share({title:'Rapportino '+ddmmyy(d.iso),files:[uri],dialogTitle:'Invia rapportino'});
+    LS.set('diagErr','');
+  }catch(e){
+    const m=errMsg(e);
+    if(/cancel/i.test(m))return;            // annullato dall'utente: tutto ok
+    LS.set('diagErr','share: '+m);
+    alert('L\'allegato NON e stato passato.\n\nErrore: '+m+'\n\nFile: '+uri+
+      '\n\nUsa "Scarica" e allega il file a mano. Riferisci questo messaggio.');
+  }
 }
 async function doShare(){
   const d=collect();if(!validate(d))return;
@@ -393,7 +413,7 @@ async function doShare(){
     const file=new File([blob],name,{type:blob.type});
     let done=false;
     if(navigator.canShare&&navigator.canShare({files:[file]})){
-      try{await navigator.share({files:[file],title:'Rapportino '+d.iso,text:mailBody(d)});done=true;}
+      try{await navigator.share({files:[file],title:'Rapportino '+ddmmyy(d.iso)});done=true;}
       catch(e){if(e.name==='AbortError')done=true;} // annullato = ok, niente fallback
     }
     if(!done){
@@ -404,29 +424,24 @@ async function doShare(){
   }catch(e){toast('Errore: '+e.message,true);}
   finally{btn.disabled=false;btn.textContent='Invia rapportino';}
 }
-async function doEmail(){
-  const d=collect();if(!validate(d))return;
-  const btn=$('btnEmail');btn.disabled=true;btn.textContent='Genero…';
-  try{
-    const blob=await buildBlob(d);const name=fileBase(d.iso)+'.xlsx';persist(d);
-    const P=window.Capacitor&&window.Capacitor.Plugins;
-    if(isNative()&&P&&P.EmailComposer){
-      const data=await blobB64(blob);
-      await P.EmailComposer.open({to:d.destinatario?[d.destinatario]:[],
-        subject:'Rapportino '+ddmmyy(d.iso)+' - '+d.cantiere,body:mailBody(d),
-        attachments:[{type:'base64',path:data,name:name}]});
-    }else{
-      download(blob,name);
-      if(d.destinatario){openMail(d);toast('File scaricato — allega all\'email aperta');}
-      else{toast('Imposta il destinatario nelle impostazioni');}
-    }
-  }catch(e){toast('Errore email: '+e.message,true);}
-  finally{btn.disabled=false;btn.textContent='Email diretta';}
+async function saveNative(blob,name){
+  const P=window.Capacitor.Plugins;const data=await blobB64(blob);let last='';
+  for(const dir of ['DOCUMENTS','EXTERNAL','CACHE']){
+    try{const w=await P.Filesystem.writeFile({path:name,data:data,directory:dir,recursive:true});
+      LS.set('diagUri',(w&&w.uri)||'');
+      alert('File salvato:\n\n'+name+'\n\nCartella: '+dir+'\n('+((w&&w.uri)||'')+')');
+      return true;
+    }catch(e){last=errMsg(e);}
+  }
+  alert('Non riesco a salvare il file.\n\nErrore: '+last);return false;
 }
 async function doDownload(){
   const d=collect();if(!validate(d))return;
-  try{const blob=await buildBlob(d);persist(d);download(blob,fileBase(d.iso)+'.xlsx');toast('File scaricato');}
-  catch(e){toast('Errore: '+e.message,true);}
+  try{
+    const blob=await buildBlob(d);persist(d);const name=fileBase(d.iso)+'.xlsx';
+    if(isNative()){await saveNative(blob,name);return;}
+    download(blob,name);toast('File scaricato');
+  }catch(e){toast('Errore: '+e.message,true);}
 }
 /* ---------- archivio mensile ---------- */
 const MESI=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
@@ -617,6 +632,8 @@ function init(){
   $('btnSaveDay').addEventListener('click',doSaveDay);
   $('btnMonth').addEventListener('click',doMonth);
   renderArch();
+  const de=LS.get('diagErr','');
+  $('diag').innerHTML=de?('<b>Ultimo errore invio:</b> '+String(de).replace(/</g,'&lt;')):'Invio: nessun errore registrato.';
   $('btnSend').addEventListener('click',doShare);
   $('btnDownload').addEventListener('click',doDownload);
   $('btnReset').addEventListener('click',()=>{if(confirm('Svuotare il report? (dipendente e cantiere restano)'))newReport();});
