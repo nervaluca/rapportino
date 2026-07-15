@@ -349,7 +349,7 @@ function collect(){
   const sum=righe.reduce((s,r)=>s+(parseFloat(r.ore)||0),0);
   const totVal=$('tot').value!==''?Number($('tot').value):(+sum.toFixed(2));
   return{dipendente:$('dipendente').value.trim(),cantiere:multi?'Cantieri vari':$('cantiere').value.trim(),
-    dateObj:new Date(Number(y),Number(m)-1,Number(dd)),iso,righe,tot:totVal,
+    dateObj:new Date(Date.UTC(Number(y),Number(m)-1,Number(dd))),iso,righe,tot:totVal,
     squadra:normCol($('squadra').value),
     firma:$('firma').value.trim(),note:$('note').value.trim(),
     destinatario:$('destinatario').value.trim(),ragione:$('ragione').value.trim(),sub:$('sub').value.trim(),
