@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0f141b">
 <title>Rapportino</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rapportino">
+<meta name="mobile-web-app-capable" content="yes">
 <script src="exceljs.min.js"></script>
 <style>
   :root{
@@ -20,6 +26,7 @@
   .wrap{max-width:640px;margin:0 auto;padding:16px 16px 140px}
   header{display:flex;align-items:baseline;gap:10px;margin:6px 2px 18px}
   header h1{font-size:1.5rem;letter-spacing:.02em;margin:0;font-weight:800}
+  header #hdrLogo{height:30px;width:auto;border-radius:5px;align-self:center}
   header .tag{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
     color:var(--bg);background:var(--hv);padding:3px 8px;border-radius:6px}
   .file-hint{margin-left:auto;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -37,8 +44,9 @@
   .two{display:flex;gap:10px}
   .two>*{flex:1;min-width:0}
   .row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
-  .rline{display:flex;gap:8px;align-items:flex-start}
-  .row .desc{flex:1}
+  .rline{display:flex;gap:8px;align-items:center}
+  .row .desc{width:100%;min-height:52px;line-height:1.35}
+  .rline .del{margin-left:auto}
   .row .cant{display:none;font-size:14px;padding:9px 12px}
   #rows.multi .row{border:1px solid var(--line);border-radius:10px;padding:10px;background:rgba(255,255,255,.02)}
   #rows.multi .row .cant{display:block}
@@ -116,6 +124,7 @@
 <body>
 <div class="wrap">
   <header>
+    <img id="hdrLogo" alt="Ten Solutions">
     <h1>Rapportino</h1>
     <span class="tag">giornaliero</span>
     <span class="file-hint">file: <b id="fileName">—</b></span>
@@ -247,8 +256,8 @@ function toast(msg,isErr){const t=$('toast');t.textContent=msg;t.className='toas
 function addRow(desc='',ore='',cant='',colleghi=null){
   const w=document.createElement('div');w.className='row';
   w.innerHTML='<input class="cant" type="text" placeholder="Cantiere (di questa riga)" list="cantieriList" autocomplete="off">'+
-    '<div class="rline">'+
     '<input class="desc" type="text" placeholder="Descrizione attività" list="descList" autocomplete="off">'+
+    '<div class="rline">'+
     '<button class="flag" data-tipo="" title="Normale / Variante / Urgente">—</button>'+
     '<input class="ore" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—">'+
     '<button class="del" title="Rimuovi">×</button></div>'+
@@ -683,6 +692,10 @@ function newReport(){
   $('note').value='';$('squadra').value='';totManual=false;$('tot').value='';$('autoHint').textContent='';
 }
 function init(){
+  $('hdrLogo').src='data:image/jpeg;base64,'+LOGO_B64;
+  if(!isNative()&&'serviceWorker' in navigator){
+    window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){});});
+  }
   $('data').value=todayISO();updateFileName();$('data').addEventListener('change',updateFileName);
   $('dipendente').addEventListener('input',updateFileName);
   $('dipendente').value=LS.get('dipendente','Nerva Luca');
