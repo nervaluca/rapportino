@@ -17,6 +17,21 @@
     --bg:#0f141b; --surface:#1a212c; --surface-2:#232c3a;
     --line:#33404f; --text:#e8edf2; --muted:#8a99ab;
     --hv:#ffc233; --hv-press:#e6ac1f; --ok:#3ecf8e; --danger:#ff6b6b; --r:14px;
+    --ph:#5f6d7e; --swknob:#1a1200; --cs:dark;
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5;
+    --line:#d3dae2; --text:#1a2330; --muted:#5f6d7e;
+    --hv:#f5a800; --hv-press:#d99500; --ok:#1f9d63; --danger:#d64545;
+    --ph:#9aa7b6; --swknob:#ffffff; --cs:light;
+  }
+  @media (prefers-color-scheme: light){
+    :root[data-theme="auto"]{
+      --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5;
+      --line:#d3dae2; --text:#1a2330; --muted:#5f6d7e;
+      --hv:#f5a800; --hv-press:#d99500; --ok:#1f9d63; --danger:#d64545;
+      --ph:#9aa7b6; --swknob:#ffffff; --cs:light;
+    }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0}
@@ -40,7 +55,8 @@
     border:1px solid var(--line);border-radius:10px;padding:12px;font-family:inherit;outline:none;transition:border-color .15s}
   input:focus,textarea:focus{border-color:var(--hv)}
   textarea{resize:vertical;min-height:76px}
-  input[type=date]{color-scheme:dark}
+  input[type=date],input[type=month]{color-scheme:var(--cs)}
+  html{color-scheme:var(--cs)}
   .two{display:flex;gap:10px}
   .two>*{flex:1;min-width:0}
   .row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
@@ -51,7 +67,7 @@
   #rows.multi .row{border:1px solid var(--line);border-radius:10px;padding:10px;background:rgba(255,255,255,.02)}
   #rows.multi .row .cant{display:block}
   .row .colleghi{font-size:13px;padding:8px 12px;color:var(--muted)}
-  .row .colleghi::placeholder{color:#5f6d7e}
+  .row .colleghi::placeholder{color:var(--ph)}
   .row .flag{flex:none;width:56px;height:46px;border:1px solid var(--line);background:var(--surface-2);
     color:var(--muted);border-radius:10px;font-size:.72rem;font-weight:700;cursor:pointer;line-height:1.1}
   .row .flag[data-tipo="variante"]{border-color:#3d6fd6;color:#a9c6ff;background:rgba(61,111,214,.16)}
@@ -63,8 +79,12 @@
   .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
     background:var(--muted);transition:transform .15s,background .15s}
   .switch input:checked+.track{background:var(--hv);border-color:var(--hv)}
-  .switch input:checked+.track::after{transform:translateX(18px);background:#1a1200}
+  .switch input:checked+.track::after{transform:translateX(18px);background:var(--swknob)}
   .switch .swlabel{font-size:.9rem;color:var(--text)}
+  .seg{display:flex;gap:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:4px}
+  .seg button{flex:1;border:none;background:transparent;color:var(--muted);font-family:inherit;
+    font-size:.9rem;font-weight:600;padding:9px 6px;border-radius:7px;cursor:pointer}
+  .seg button.on{background:var(--hv);color:#1a1200}
   .row .ore{width:78px;flex:none;text-align:center;font-variant-numeric:tabular-nums}
   .row .del{flex:none;width:44px;height:46px;border:1px solid var(--line);background:var(--surface-2);
     color:var(--muted);border-radius:10px;font-size:1.2rem;line-height:1;cursor:pointer}
@@ -203,6 +223,14 @@
   <details class="card" id="settings">
     <summary><span>Impostazioni ditta e invio</span><span class="chev">▾</span></summary>
     <div class="body">
+      <div class="field">
+        <label>Tema</label>
+        <div class="seg" id="themeSeg">
+          <button type="button" data-theme="dark">Scuro</button>
+          <button type="button" data-theme="light">Chiaro</button>
+          <button type="button" data-theme="auto">Auto</button>
+        </div>
+      </div>
       <div class="field">
         <label for="destinatario">Invia a (email ditta)</label>
         <input id="destinatario" type="email" inputmode="email" placeholder="ufficio@ditta.it" autocomplete="off">
@@ -691,7 +719,28 @@ function newReport(){
   $('data').value=todayISO();updateFileName();
   $('note').value='';$('squadra').value='';totManual=false;$('tot').value='';$('autoHint').textContent='';
 }
+function currentScheme(){
+  const t=document.documentElement.getAttribute('data-theme');
+  if(t==='light')return 'light';
+  if(t==='auto'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)return 'light';
+  return 'dark';
+}
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  LS.set('tema',t);
+  [...document.querySelectorAll('#themeSeg button')].forEach(function(b){
+    b.classList.toggle('on',b.dataset.theme===t);
+  });
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.setAttribute('content',currentScheme()==='light'?'#f4f6f9':'#0f141b');
+}
 function init(){
+  applyTheme(LS.get('tema','dark'));
+  [...document.querySelectorAll('#themeSeg button')].forEach(function(b){
+    b.addEventListener('click',function(){applyTheme(b.dataset.theme);});
+  });
+  if(window.matchMedia){window.matchMedia('(prefers-color-scheme: light)').addEventListener('change',function(){
+    if(document.documentElement.getAttribute('data-theme')==='auto')applyTheme('auto');});}
   $('hdrLogo').src='data:image/jpeg;base64,'+LOGO_B64;
   if(!isNative()&&'serviceWorker' in navigator){
     window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){});});
