@@ -216,6 +216,12 @@
       <div class="asum" id="archSum"></div>
       <button class="addrow" id="btnSaveDay" style="margin-top:12px">Salva questo giorno in archivio</button>
       <button class="btn btn-primary" id="btnMonth" style="width:100%;margin-top:10px">Genera riepilogo</button>
+      <div class="two" style="margin-top:14px">
+        <button class="btn btn-ghost" id="btnExport">Backup (esporta)</button>
+        <button class="btn btn-ghost" id="btnImport">Ripristina (importa)</button>
+      </div>
+      <input id="importFile" type="file" accept="application/json,.json" style="display:none">
+      <p class="hintline" id="backupInfo" style="margin-top:8px"></p>
     </div>
   </details>
 
@@ -631,6 +637,76 @@ async function buildMonthly(r){
   const buf=await wb.xlsx.writeBuffer();
   return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
+/* ---------- backup archivio ---------- */
+function backupPayload(){
+  return JSON.stringify({
+    app:'rapportino-tensolutions',type:'backup',version:1,
+    exported:new Date().toISOString(),
+    archivio:loadArch(),
+    settings:{dipendente:LS.get('dipendente',''),firma:LS.get('firma',''),
+      destinatario:LS.get('destinatario',''),soglia:LS.get('soglia',8),
+      ragione:LS.get('ragione',''),sub:LS.get('sub',''),
+      cantieri:LS.get('cantieri',[]),descrizioni:LS.get('descrizioni',[]),
+      colleghi:LS.get('colleghi',[]),squadre:LS.get('squadre',[])}
+  },null,2);
+}
+async function doExport(){
+  const json=backupPayload();
+  const n=Object.keys(loadArch()).length;
+  const name='rapportino-backup-'+todayISO()+'.json';
+  try{
+    if(isNative()){
+      const P=window.Capacitor.Plugins;
+      const b64=btoa(unescape(encodeURIComponent(json)));
+      const w=await P.Filesystem.writeFile({path:name,data:b64,directory:'CACHE',recursive:true});
+      await P.Share.share({title:'Backup rapportino',files:[w.uri],dialogTitle:'Salva il backup'});
+    }else{
+      const blob=new Blob([json],{type:'application/json'});
+      download(blob,name);
+    }
+    toast('Backup creato ('+n+' giorni)');
+  }catch(e){const m=errMsg(e);if(!/cancel/i.test(m))toast('Errore backup: '+m,true);}
+}
+function mergeBackup(obj,replace){
+  if(!obj||obj.type!=='backup'||!obj.archivio)throw new Error('file non valido');
+  const cur=loadArch();
+  const merged=replace?obj.archivio:Object.assign({},cur,obj.archivio);
+  saveArch(merged);
+  const s=obj.settings||{};
+  ['dipendente','firma','destinatario','soglia','ragione','sub'].forEach(function(k){
+    if(s[k]!==undefined&&s[k]!=='')LS.set(k,s[k]);
+  });
+  ['cantieri','descrizioni','colleghi','squadre'].forEach(function(k){
+    if(Array.isArray(s[k])){const set=new Set([].concat(LS.get(k,[]),s[k]));LS.set(k,[...set].slice(0,50));}
+  });
+  return Object.keys(merged).length;
+}
+function doImportFile(file){
+  const rd=new FileReader();
+  rd.onload=function(){
+    try{
+      const obj=JSON.parse(String(rd.result));
+      const nNew=Object.keys(obj.archivio||{}).length;
+      const nCur=Object.keys(loadArch()).length;
+      const replace=confirm('Backup con '+nNew+' giorni.\n\nOK = UNISCI ai '+nCur+' giorni gia presenti (consigliato)\nAnnulla = scegli se sostituire tutto');
+      let doReplace=false;
+      if(!replace){doReplace=confirm('SOSTITUIRE tutto l\'archivio attuale?\n\nOK = cancella i giorni attuali e mette solo quelli del backup\nAnnulla = non importare');
+        if(!doReplace)return;}
+      const tot=mergeBackup(obj,doReplace);
+      $('dipendente').value=LS.get('dipendente',$('dipendente').value);
+      $('soglia').value=LS.get('soglia',8);
+      fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');fillColleghi();
+      renderArch();refreshBackupInfo();
+      alert('Importato. Ora in archivio: '+tot+' giorni.');
+    }catch(e){alert('File non valido: '+errMsg(e));}
+  };
+  rd.onerror=function(){alert('Impossibile leggere il file.');};
+  rd.readAsText(file);
+}
+function refreshBackupInfo(){
+  const n=Object.keys(loadArch()).length;
+  const el=$('backupInfo');if(el)el.innerHTML='In archivio: <b>'+n+'</b> giorni. Il backup salva tutto in un file da tenere su Drive.';
+}
 async function doMonth(){
   const r=activeRange();
   const days=archRange(r);
@@ -768,6 +844,10 @@ function init(){
   $('soglia').addEventListener('input',renderArch);
   $('btnSaveDay').addEventListener('click',doSaveDay);
   $('btnMonth').addEventListener('click',doMonth);
+  $('btnExport').addEventListener('click',doExport);
+  $('btnImport').addEventListener('click',function(){$('importFile').click();});
+  $('importFile').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){doImportFile(e.target.files[0]);e.target.value='';}});
+  refreshBackupInfo();
   renderArch();
   const de=LS.get('diagErr','');
   $('diag').innerHTML=de?('<b>Ultimo errore invio:</b> '+String(de).replace(/</g,'&lt;')):'Invio: nessun errore registrato.';
