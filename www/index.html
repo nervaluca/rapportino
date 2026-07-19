@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0f141b">
+<meta name="theme-color" content="#0d1522">
 <title>Rapportino</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -14,23 +14,22 @@
 <script src="exceljs.min.js"></script>
 <style>
   :root{
-    --bg:#0f141b; --surface:#1a212c; --surface-2:#232c3a;
-    --line:#33404f; --text:#e8edf2; --muted:#8a99ab;
-    --hv:#ffc233; --hv-press:#e6ac1f; --ok:#3ecf8e; --danger:#ff6b6b; --r:14px;
-    --ph:#5f6d7e; --swknob:#1a1200; --cs:dark;
+    --bg:#0d1522; --surface:#152238; --surface-2:#1e2f4d;
+    --line:#2c4066; --text:#e9eef7; --muted:#8fa2c0;
+    --hv:#9edc3a; --hv-press:#8bc72f; --hvtext:#0d1522;
+    --ok:#9edc3a; --danger:#ff6b6b; --r:14px;
+    --ph:#66789a; --swknob:#0d1522; --cs:dark;
   }
-  :root[data-theme="light"]{
-    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5;
-    --line:#d3dae2; --text:#1a2330; --muted:#5f6d7e;
-    --hv:#f5a800; --hv-press:#d99500; --ok:#1f9d63; --danger:#d64545;
-    --ph:#9aa7b6; --swknob:#ffffff; --cs:light;
+  :root[data-theme="light"]{ --bg:#eef3ec; --surface:#ffffff; --surface-2:#e6efe2;
+      --line:#cdddc6; --text:#16224b; --muted:#5d6b7e;
+      --hv:#2a3aa0; --hv-press:#1f2c82; --ok:#4a9d2f; --danger:#d64545;
+      --ph:#93a2b3; --swknob:#ffffff; --cs:light; --hvtext:#ffffff;
   }
   @media (prefers-color-scheme: light){
-    :root[data-theme="auto"]{
-      --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5;
-      --line:#d3dae2; --text:#1a2330; --muted:#5f6d7e;
-      --hv:#f5a800; --hv-press:#d99500; --ok:#1f9d63; --danger:#d64545;
-      --ph:#9aa7b6; --swknob:#ffffff; --cs:light;
+    :root[data-theme="auto"]{ --bg:#eef3ec; --surface:#ffffff; --surface-2:#e6efe2;
+      --line:#cdddc6; --text:#16224b; --muted:#5d6b7e;
+      --hv:#2a3aa0; --hv-press:#1f2c82; --ok:#4a9d2f; --danger:#d64545;
+      --ph:#93a2b3; --swknob:#ffffff; --cs:light; --hvtext:#ffffff;
     }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -43,7 +42,7 @@
   header h1{font-size:1.5rem;letter-spacing:.02em;margin:0;font-weight:800}
   header #hdrLogo{height:30px;width:auto;border-radius:5px;align-self:center}
   header .tag{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--bg);background:var(--hv);padding:3px 8px;border-radius:6px}
+    color:var(--hvtext);background:var(--hv);padding:3px 8px;border-radius:6px}
   .file-hint{margin-left:auto;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
   .file-hint b{color:var(--hv)}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
@@ -84,7 +83,7 @@
   .seg{display:flex;gap:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:4px}
   .seg button{flex:1;border:none;background:transparent;color:var(--muted);font-family:inherit;
     font-size:.9rem;font-weight:600;padding:9px 6px;border-radius:7px;cursor:pointer}
-  .seg button.on{background:var(--hv);color:#1a1200}
+  .seg button.on{background:var(--hv);color:var(--hvtext)}
   .row .ore{width:78px;flex:none;text-align:center;font-variant-numeric:tabular-nums}
   .row .del{flex:none;width:44px;height:46px;border:1px solid var(--line);background:var(--surface-2);
     color:var(--muted);border-radius:10px;font-size:1.2rem;line-height:1;cursor:pointer}
@@ -111,7 +110,7 @@
     padding:12px 16px calc(14px + env(safe-area-inset-bottom));z-index:20}
   .bar-inner{max-width:640px;margin:0 auto;display:flex;gap:10px}
   .btn{flex:1;border:none;border-radius:12px;padding:15px;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit}
-  .btn-primary{background:var(--hv);color:#1a1200;flex:2}
+  .btn-primary{background:var(--hv);color:var(--hvtext);flex:2}
   .btn-primary:active{background:var(--hv-press)}
   .btn-ghost{background:var(--surface-2);color:var(--text);border:1px solid var(--line)}
   .btn-ghost:active{background:var(--surface)}
@@ -732,7 +731,7 @@ function applyTheme(t){
     b.classList.toggle('on',b.dataset.theme===t);
   });
   const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta)meta.setAttribute('content',currentScheme()==='light'?'#f4f6f9':'#0f141b');
+  if(meta)meta.setAttribute('content',currentScheme()==='light'?'#eef3ec':'#0d1522');
 }
 function init(){
   applyTheme(LS.get('tema','dark'));
