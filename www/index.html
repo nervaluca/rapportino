@@ -50,6 +50,8 @@
   label{display:block;font-size:.8rem;color:var(--muted);margin:0 0 6px}
   .field{margin-bottom:12px}
   .field:last-child{margin-bottom:0}
+  select{width:100%;font-size:16px;color:var(--text);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px;font-family:inherit;outline:none}
+  select:focus{border-color:var(--hv)}
   input,textarea{width:100%;font-size:16px;color:var(--text);background:var(--surface-2);
     border:1px solid var(--line);border-radius:10px;padding:12px;font-family:inherit;outline:none;transition:border-color .15s}
   input:focus,textarea:focus{border-color:var(--hv)}
@@ -209,6 +211,24 @@
         <div class="field"><label for="ferAl">Al</label><input id="ferAl" type="date"></div>
       </div>
       <button class="btn btn-primary" id="btnFerie" style="width:100%;margin-top:6px">Aggiungi ferie</button>
+
+      <div style="border-top:1px solid var(--line);margin:16px 0 14px"></div>
+      <h2 style="margin-bottom:12px">Richiesta da inviare</h2>
+      <p class="hintline" style="margin-top:0">Prepara un'email gia scritta per il datore (destinatario dalle Impostazioni). Solo testo, nessun allegato.</p>
+      <div class="field">
+        <label for="reqMotivo">Motivo</label>
+        <select id="reqMotivo">
+          <option value="Ferie">Ferie</option>
+          <option value="Permesso">Permesso</option>
+          <option value="Malattia">Malattia</option>
+          <option value="Altro">Altro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="reqNota">Nota (facoltativa)</label>
+        <textarea id="reqNota" placeholder="Es. per motivi familiari"></textarea>
+      </div>
+      <button class="btn btn-ghost" id="btnReqFerie" style="width:100%">Prepara email di richiesta</button>
     </div>
   </details>
 
@@ -541,6 +561,25 @@ function addFerie(){
   if(skip)msg+=', '+skip+' saltati (gia presenti)';
   if(we)msg+=', '+we+' weekend esclusi';
   toast(msg);
+}
+function reqFerie(){
+  const f=$('ferDal').value, t=$('ferAl').value;
+  if(!f||!t){toast('Imposta le due date',true);return;}
+  let from=f,to=t; if(from>to){const x=from;from=to;to=x;}
+  const motivo=$('reqMotivo').value;
+  const nota=$('reqNota').value.trim();
+  const dip=LS.get('dipendente','')||$('dipendente').value.trim();
+  const dest=LS.get('destinatario','')||$('destinatario').value.trim();
+  const uno=(from===to);
+  const oggetto='Richiesta '+motivo.toLowerCase()+' '+(uno?fmtIt(from):(fmtIt(from)+' - '+fmtIt(to)));
+  let corpo='Buongiorno,\n\ncon la presente '+dip+' richiede '+motivo.toLowerCase()+' ';
+  corpo+=uno?('per il giorno '+fmtIt(from)):('dal '+fmtIt(from)+' al '+fmtIt(to));
+  corpo+='.';
+  if(nota)corpo+='\n\nNota: '+nota;
+  corpo+='\n\nIn attesa di riscontro, cordiali saluti.\n'+dip;
+  const url='mailto:'+encodeURIComponent(dest)+'?subject='+encodeURIComponent(oggetto)+'&body='+encodeURIComponent(corpo);
+  try{ if(isNative()){window.open(url,'_system');} else {location.href=url;} toast('Email di richiesta pronta'); }
+  catch(e){ toast('Errore: '+errMsg(e),true); }
 }
 function saveDay(d){
   if(!d.iso)return;
@@ -893,6 +932,7 @@ function init(){
   $('btnSaveDay').addEventListener('click',doSaveDay);
   $('btnMonth').addEventListener('click',doMonth);
   $('btnFerie').addEventListener('click',addFerie);
+  $('btnReqFerie').addEventListener('click',reqFerie);
   $('btnExport').addEventListener('click',doExport);
   $('btnImport').addEventListener('click',function(){$('importFile').click();});
   $('importFile').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){doImportFile(e.target.files[0]);e.target.value='';}});
