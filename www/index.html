@@ -200,6 +200,18 @@
     </div>
   </div>
 
+  <details class="card" id="ferie">
+    <summary><span>Ferie / Permessi</span><span class="chev">&#9662;</span></summary>
+    <div class="body">
+      <p class="hintline" style="margin-top:0">Aggiunge 8 ore per ogni giorno feriale del periodo (sabato e domenica esclusi). Finiscono nel riepilogo del mese.</p>
+      <div class="two">
+        <div class="field"><label for="ferDal">Dal</label><input id="ferDal" type="date"></div>
+        <div class="field"><label for="ferAl">Al</label><input id="ferAl" type="date"></div>
+      </div>
+      <button class="btn btn-primary" id="btnFerie" style="width:100%;margin-top:6px">Aggiungi ferie</button>
+    </div>
+  </details>
+
   <details class="card" id="arch">
     <summary><span>Archivio e riepilogo mensile</span><span class="chev">&#9662;</span></summary>
     <div class="body">
@@ -498,6 +510,38 @@ function loadArch(){return LS.get('archivio',{});}
 function saveArch(a){LS.set('archivio',a);}
 function soglia(){return Number(LS.get('soglia',8))||8;}
 function strOf(tot){return Math.max(0,+((Number(tot)||0)-soglia()).toFixed(2));}
+function addFerie(){
+  const f=$('ferDal').value, t=$('ferAl').value;
+  if(!f||!t){toast('Imposta le due date',true);return;}
+  let from=f, to=t; if(from>to){const x=from;from=to;to=x;}
+  const dip=LS.get('dipendente','');
+  const a=loadArch();
+  let add=0, skip=0, we=0;
+  // itera giorno per giorno in modo sicuro (UTC, niente slittamenti)
+  let cur=new Date(from+'T12:00:00');
+  const end=new Date(to+'T12:00:00');
+  while(cur<=end){
+    const g=cur.getDay(); // 0=dom, 6=sab
+    const iso=cur.getFullYear()+'-'+('0'+(cur.getMonth()+1)).slice(-2)+'-'+('0'+cur.getDate()).slice(-2);
+    if(g===0||g===6){ we++; }
+    else if(a[iso]){ skip++; }
+    else {
+      a[iso]={iso:iso,dipendente:dip,cantiere:'FERIE',tot:8,ferie:true,multi:false,
+        squadra:'',note:'',raw:[{desc:'Ferie',ore:8,tipo:'',colleghi:''}]};
+      add++;
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  saveArch(a);
+  // porta l'archivio sul mese delle ferie e mostra
+  $('mese').value=from.slice(0,7);
+  if($('periodOn'))$('periodOn').checked=false;
+  renderArch();refreshBackupInfo&&refreshBackupInfo();
+  let msg=add+' giorni di ferie aggiunti';
+  if(skip)msg+=', '+skip+' saltati (gia presenti)';
+  if(we)msg+=', '+we+' weekend esclusi';
+  toast(msg);
+}
 function saveDay(d){
   if(!d.iso)return;
   const a=loadArch();
@@ -618,8 +662,12 @@ async function buildMonthly(r){
   c.font={name:'Calibri',size:14,bold:true,color:{argb:'FFCC0000'}};
   c.alignment={horizontal:'center'};c.border=box;grey(c);
   ws.getRow(rr).height=24;rr+=2;
-  [['Giorni lavorati',days.length],['Ore ordinarie',+(tot-str).toFixed(2)],
-   ['Ore straordinarie',+str.toFixed(2)]].forEach(function(x){
+  const gFerie=days.filter(function(d){return d.ferie;}).length;
+  const gLav=days.length-gFerie;
+  const righeSum=[['Giorni lavorati',gLav],['Ore ordinarie',+(tot-str).toFixed(2)],
+   ['Ore straordinarie',+str.toFixed(2)]];
+  if(gFerie)righeSum.push(['Giorni ferie/permesso',gFerie]);
+  righeSum.forEach(function(x){
     ws.mergeCells('B'+rr+':C'+rr);const a=ws.getCell('B'+rr);a.value=x[0]+':';
     a.font={name:'Calibri',size:11,bold:true};a.alignment={horizontal:'right'};
     const b=ws.getCell('D'+rr);b.value=x[1];b.font={name:'Calibri',size:11,bold:true};
@@ -844,6 +892,7 @@ function init(){
   $('soglia').addEventListener('input',renderArch);
   $('btnSaveDay').addEventListener('click',doSaveDay);
   $('btnMonth').addEventListener('click',doMonth);
+  $('btnFerie').addEventListener('click',addFerie);
   $('btnExport').addEventListener('click',doExport);
   $('btnImport').addEventListener('click',function(){$('importFile').click();});
   $('importFile').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){doImportFile(e.target.files[0]);e.target.value='';}});
