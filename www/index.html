@@ -165,11 +165,19 @@
         <input id="data" type="date">
       </div>
     </div>
-    <div class="field">
-      <label for="cantiere">Cantiere</label>
-      <input id="cantiere" type="text" placeholder="Nome cantiere" list="cantieriList" autocomplete="off">
-      <datalist id="cantieriList"></datalist>
+    <div class="two">
+      <div class="field" style="margin-bottom:0">
+        <label for="cantiere">Cantiere</label>
+        <input id="cantiere" type="text" placeholder="Nome cantiere" list="cantieriList" autocomplete="off">
+        <datalist id="cantieriList"></datalist>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label for="luogo">Localit&agrave;</label>
+        <input id="luogo" type="text" placeholder="Dove siamo" list="luoghiList" autocomplete="off">
+        <datalist id="luoghiList"></datalist>
+      </div>
     </div>
+    <label class="switch" style="margin-top:12px;margin-bottom:0"><input type="checkbox" id="trasferta"><span class="track"></span><span class="swlabel">Trasferta</span></label>
   </div>
 
   <div class="card">
@@ -268,15 +276,11 @@
           <button type="button" data-theme="auto">Auto</button>
         </div>
       </div>
-      <div class="field">
-        <label for="destinatario">Invia a (email ditta)</label>
-        <input id="destinatario" type="email" inputmode="email" placeholder="ufficio@ditta.it" autocomplete="off">
-      </div>
+      <input id="destinatario" type="hidden">
       <div class="field">
         <label for="soglia">Ore ordinarie al giorno (oltre = straordinario)</label>
         <input id="soglia" type="number" step="0.5" min="0" value="8">
       </div>
-      <p class="hintline">Salvato una volta. Il tasto "Invia email alla ditta" apre la posta già indirizzata a questo destinatario, con l'xlsx allegato.</p>
       <div class="field">
         <label for="ragione">Intestazione ditta (testo, provvisorio)</label>
         <input id="ragione" type="text" placeholder="Ragione sociale" autocomplete="off">
@@ -377,7 +381,7 @@ async function buildBlob(d){
   c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);
   c=ws.getCell('C'+r);c.value='Giorno:';c.font={name:'Calibri',size:11,bold:true};
   c.alignment={horizontal:'center'};c.border=box;grey(c);ws.getRow(r).height=21;r++;
-  c=ws.getCell('B'+r);c.value='Cantiere: '+d.cantiere;c.font={name:'Calibri',size:12,bold:true};c.border=box;
+  c=ws.getCell('B'+r);c.value='Cantiere: '+d.cantiere+(d.luogo?('   -   '+d.luogo):'')+(d.trasferta?'   [TRASFERTA]':'');c.font={name:'Calibri',size:12,bold:true};c.border=box;
   c=ws.getCell('C'+r);c.value=d.dateObj;c.numFmt='dd/mm/yyyy';c.font={name:'Calibri',size:11};
   c.alignment={horizontal:'center'};c.border=box;ws.getRow(r).height=28.5;r+=2;
   c=ws.getCell('B'+r);c.value='Descrizione del lavoro svolto:';c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);
@@ -423,6 +427,7 @@ function collect(){
   const sum=righe.reduce((s,r)=>s+(parseFloat(r.ore)||0),0);
   const totVal=$('tot').value!==''?Number($('tot').value):(+sum.toFixed(2));
   return{dipendente:$('dipendente').value.trim(),cantiere:multi?'Cantieri vari':$('cantiere').value.trim(),
+    luogo:$('luogo').value.trim(),trasferta:$('trasferta').checked,
     dateObj:new Date(Date.UTC(Number(y),Number(m)-1,Number(dd))),iso,righe,tot:totVal,
     squadra:normCol($('squadra').value),
     firma:$('firma').value.trim(),note:$('note').value.trim(),
@@ -433,6 +438,7 @@ function persist(d){
   LS.set('dipendente',d.dipendente);LS.set('firma',d.firma);LS.set('lastCantiere',d.cantiere);
   LS.set('destinatario',d.destinatario);LS.set('ragione',d.ragione);LS.set('sub',d.sub);
   if(!isMulti())remember('cantieri',d.cantiere);
+  if(d.luogo)remember('luoghi',d.luogo);
   [...document.querySelectorAll('#rows .cant')].forEach(i=>remember('cantieri',i.value.trim()));
   [...document.querySelectorAll('#rows .desc')].forEach(i=>remember('descrizioni',i.value.trim()));
   const sq=normCol($('squadra').value);if(sq)remember('squadre',sq);
@@ -585,7 +591,8 @@ function saveDay(d){
   if(!d.iso)return;
   const a=loadArch();
   a[d.iso]={iso:d.iso,dipendente:d.dipendente,cantiere:d.cantiere,tot:d.tot,
-    squadra:d.squadra,note:d.note,raw:d.raw,multi:d.multi};
+    squadra:d.squadra,note:d.note,raw:d.raw,multi:d.multi,
+    luogo:d.luogo,trasferta:d.trasferta,ferie:a[d.iso]&&a[d.iso].ferie?true:d.ferie};
   saveArch(a);renderArch();
 }
 function delDay(iso){const a=loadArch();delete a[iso];saveArch(a);renderArch();toast('Giorno rimosso');}
@@ -606,6 +613,7 @@ function loadDay(iso,silent){
   if(d.dipendente)$('dipendente').value=d.dipendente;
   $('multiCant').checked=!!d.multi;setMulti(!!d.multi);
   if(!d.multi)$('cantiere').value=d.cantiere||'';
+  $('luogo').value=d.luogo||'';$('trasferta').checked=!!d.trasferta;
   $('squadra').value=d.squadra||'';$('note').value=d.note||'';
   $('rows').innerHTML='';
   (d.raw||[]).forEach(r=>{
@@ -853,7 +861,7 @@ function flushSave(){
 }
 function autosave(){clearTimeout(_svT);_svT=setTimeout(flushSave,700);}
 function wireAutosave(){
-  ['dipendente','cantiere','data','squadra','note','tot','firma','multiCant'].forEach(function(id){
+  ['dipendente','cantiere','luogo','trasferta','data','squadra','note','tot','firma','multiCant'].forEach(function(id){
     const el=$(id);if(!el)return;
     el.addEventListener('input',autosave);el.addEventListener('change',autosave);
   });
@@ -879,7 +887,7 @@ function restoreToday(){
 function newReport(){
   $('rows').innerHTML='';addRow();addRow();addRow();
   $('data').value=todayISO();updateFileName();
-  $('note').value='';$('squadra').value='';totManual=false;$('tot').value='';$('autoHint').textContent='';
+  $('note').value='';$('squadra').value='';$('luogo').value='';$('trasferta').checked=false;totManual=false;$('tot').value='';$('autoHint').textContent='';
 }
 function currentScheme(){
   const t=document.documentElement.getAttribute('data-theme');
@@ -909,12 +917,12 @@ function init(){
   }
   $('data').value=todayISO();updateFileName();$('data').addEventListener('change',updateFileName);
   $('dipendente').addEventListener('input',updateFileName);
-  $('dipendente').value=LS.get('dipendente','Nerva Luca');
-  $('firma').value=LS.get('firma',LS.get('dipendente','Nerva Luca'));
+  $('dipendente').value=LS.get('dipendente','');
+  $('firma').value=LS.get('firma',LS.get('dipendente',''));
   $('cantiere').value=LS.get('lastCantiere','');
   $('destinatario').value=LS.get('destinatario','');
   $('ragione').value=LS.get('ragione','');$('sub').value=LS.get('sub','');
-  fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');
+  fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');fillDatalist('luoghiList','luoghi');
   addRow();addRow();addRow();
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
