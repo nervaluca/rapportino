@@ -381,7 +381,7 @@ async function buildBlob(d){
   c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);
   c=ws.getCell('C'+r);c.value='Giorno:';c.font={name:'Calibri',size:11,bold:true};
   c.alignment={horizontal:'center'};c.border=box;grey(c);ws.getRow(r).height=21;r++;
-  c=ws.getCell('B'+r);c.value='Cantiere: '+d.cantiere+(d.luogo?('   -   '+d.luogo):'')+(d.trasferta?'   [TRASFERTA]':'');c.font={name:'Calibri',size:12,bold:true};c.border=box;
+  c=ws.getCell('B'+r);c.value='Cantiere: '+d.cantiere+(d.luogo?('   -   '+d.luogo):'');c.font={name:'Calibri',size:12,bold:true};c.border=box;
   c=ws.getCell('C'+r);c.value=d.dateObj;c.numFmt='dd/mm/yyyy';c.font={name:'Calibri',size:11};
   c.alignment={horizontal:'center'};c.border=box;ws.getRow(r).height=28.5;r+=2;
   c=ws.getCell('B'+r);c.value='Descrizione del lavoro svolto:';c.font={name:'Calibri',size:11,bold:true};c.border=box;grey(c);
@@ -680,13 +680,16 @@ async function buildMonthly(r){
     .forEach(function(x){const cc=ws.getCell(x[0]+rr);cc.value=x[1];
       cc.font={name:'Calibri',size:11,bold:true};cc.alignment={horizontal:x[2]};cc.border=box;grey(cc);});
   ws.getRow(rr).height=21;rr++;
-  let tot=0,str=0;const perCant={};
+  let tot=0,str=0;const perCant={};let anyTras=false;
   days.forEach(function(d){
     const s=strOf(d.tot);tot+=Number(d.tot)||0;str+=s;
     const p=d.iso.split('-');
     let cc=ws.getCell('B'+rr);cc.value=p[2]+'/'+p[1]+'/'+p[0].slice(2);
     cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'left'};cc.border=box;
-    cc=ws.getCell('C'+rr);cc.value=d.cantiere||'';cc.font={name:'Calibri',size:11};
+    cc=ws.getCell('C'+rr);
+    cc.value=(d.cantiere||'')+(d.luogo?(' - '+d.luogo):'')+(d.trasferta?'  [T]':'');
+    cc.font={name:'Calibri',size:11,bold:d.trasferta?true:false};
+    if(d.trasferta){cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF2CC'}};anyTras=true;}
     cc.alignment={horizontal:'left',wrapText:true};cc.border=box;
     cc=ws.getCell('D'+rr);cc.value=+(Number(d.tot)||0).toFixed(2);
     cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'center'};cc.border=box;
@@ -714,6 +717,8 @@ async function buildMonthly(r){
   const righeSum=[['Giorni lavorati',gLav],['Ore ordinarie',+(tot-str).toFixed(2)],
    ['Ore straordinarie',+str.toFixed(2)]];
   if(gFerie)righeSum.push(['Giorni ferie/permesso',gFerie]);
+  const gTras=days.filter(function(d){return d.trasferta;}).length;
+  if(gTras)righeSum.push(['Giorni di trasferta',gTras]);
   righeSum.forEach(function(x){
     ws.mergeCells('B'+rr+':C'+rr);const a=ws.getCell('B'+rr);a.value=x[0]+':';
     a.font={name:'Calibri',size:11,bold:true};a.alignment={horizontal:'right'};
