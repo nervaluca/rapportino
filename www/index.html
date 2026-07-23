@@ -62,7 +62,7 @@
   .two>*{flex:1;min-width:0}
   .row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
   .rline{display:flex;gap:8px;align-items:center}
-  .row .desc{width:100%;min-height:52px;line-height:1.35}
+  .row .desc{width:100%;min-height:62px;line-height:1.4;resize:vertical;font-family:inherit}
   .rline .del{margin-left:auto}
   .row .cant{display:none;font-size:14px;padding:9px 12px}
   #rows.multi .row{border:1px solid var(--line);border-radius:10px;padding:10px;background:rgba(255,255,255,.02)}
@@ -328,7 +328,7 @@ function toast(msg,isErr){const t=$('toast');t.textContent=msg;t.className='toas
 function addRow(desc='',ore='',cant='',colleghi=null){
   const w=document.createElement('div');w.className='row';
   w.innerHTML='<input class="cant" type="text" placeholder="Cantiere (di questa riga)" list="cantieriList" autocomplete="off">'+
-    '<input class="desc" type="text" placeholder="Descrizione attività" list="descList" autocomplete="off">'+
+    '<textarea class="desc" rows="2" placeholder="Descrizione attività" autocomplete="off"></textarea>'+
     '<div class="rline">'+
     '<button class="flag" data-tipo="" title="Normale / Variante / Urgente">—</button>'+
     '<input class="ore" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—">'+
@@ -405,7 +405,12 @@ async function buildBlob(d){
     bc.alignment={horizontal:'left',vertical:'top',wrapText:true};cc.alignment={horizontal:'center',vertical:'top'};
     bc.border=box;cc.border=box;
     if(fill){bc.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill}};cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill}};}
-    ws.getRow(r).height=row.colleghi?31:22.5;r++;});
+    // altezza riga adattiva: tiene conto delle righe scritte a mano e del testo lungo
+    const _txt=String(row.desc||'');
+    const _cap=Math.max(1,Math.ceil(_txt.length/58));
+    const _nl=_txt.split('\n').length;
+    const _lines=Math.max(_cap,_nl);
+    ws.getRow(r).height=Math.max(22.5,_lines*15+(row.colleghi?10:6));r++;});
   c=ws.getCell('B'+r);c.value='TOT:';c.font={name:'Calibri',size:11,bold:true};c.alignment={horizontal:'right'};c.border=box;
   c=ws.getCell('C'+r);c.value=d.tot;c.font={name:'Calibri',size:15,bold:true};c.alignment={horizontal:'center'};c.border=box;r++;
   if(d.squadra){ws.mergeCells('B'+r+':C'+r);const sq=ws.getCell('B'+r);sq.value='Squadra: '+d.squadra;
