@@ -222,7 +222,7 @@
 
       <div style="border-top:1px solid var(--line);margin:16px 0 14px"></div>
       <h2 style="margin-bottom:12px">Richiesta da inviare</h2>
-      <p class="hintline" style="margin-top:0">Prepara un'email gia scritta per il datore (destinatario dalle Impostazioni). Solo testo, nessun allegato.</p>
+      <p class="hintline" style="margin-top:0">Prepara un'email gi&agrave; scritta per il datore, indirizzata all'email ditta impostata nelle Impostazioni. Solo testo, nessun allegato.</p>
       <div class="field">
         <label for="reqMotivo">Motivo</label>
         <select id="reqMotivo">
@@ -276,7 +276,10 @@
           <button type="button" data-theme="auto">Auto</button>
         </div>
       </div>
-      <input id="destinatario" type="hidden">
+      <div class="field">
+        <label for="destinatario">Email ditta (per richieste ferie/permessi)</label>
+        <input id="destinatario" type="email" inputmode="email" placeholder="ufficio@ditta.it" autocomplete="off">
+      </div>
       <div class="field">
         <label for="soglia">Ore ordinarie al giorno (oltre = straordinario)</label>
         <input id="soglia" type="number" step="0.5" min="0" value="8">
