@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0d1522">
 <title>Rapportino</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Rapportino">
@@ -863,9 +863,23 @@ function markSaved(){
   const el=$('saveState');el.textContent='salvato alle '+hh+':'+mm;el.className='savestate ok';
   setTimeout(function(){el.className='savestate';},1500);
 }
+function saveIdentity(){
+  // dati personali/impostazioni: salvati SEMPRE, anche senza righe di lavoro
+  try{
+    LS.set('dipendente',$('dipendente').value.trim());
+    LS.set('firma',$('firma').value.trim());
+    LS.set('destinatario',$('destinatario').value.trim());
+    LS.set('soglia',Number($('soglia').value)||8);
+    LS.set('ragione',$('ragione').value.trim());
+    LS.set('sub',$('sub').value.trim());
+    const c=$('cantiere').value.trim();
+    if(c&&!isMulti())LS.set('lastCantiere',c);
+  }catch(e){}
+}
 function flushSave(){
   clearTimeout(_svT);
   try{
+    saveIdentity();
     if(!hasContent())return;
     const d=collect();
     if(!d.iso)return;
@@ -874,9 +888,11 @@ function flushSave(){
 }
 function autosave(){clearTimeout(_svT);_svT=setTimeout(flushSave,700);}
 function wireAutosave(){
-  ['dipendente','cantiere','luogo','trasferta','data','squadra','note','tot','firma','multiCant'].forEach(function(id){
+  ['dipendente','cantiere','luogo','trasferta','data','squadra','note','tot','firma','multiCant',
+   'destinatario','soglia','ragione','sub'].forEach(function(id){
     const el=$(id);if(!el)return;
     el.addEventListener('input',autosave);el.addEventListener('change',autosave);
+    el.addEventListener('blur',saveIdentity);
   });
   $('rows').addEventListener('input',autosave);
   $('rows').addEventListener('click',function(e){
