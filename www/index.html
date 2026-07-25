@@ -139,12 +139,26 @@
   .bbanner button{flex:none;background:var(--hv);color:var(--hvtext);border:none;border-radius:8px;
     padding:8px 12px;font-weight:700;font-size:.83rem;font-family:inherit;cursor:pointer}
   .savestate.ok{color:var(--ok)}
+  .squadra-head{display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+  .squadra-head .sqlabel{font-weight:600;font-size:.9rem;flex:none}
+  .squadra-head .sqsummary{flex:1;min-width:0;color:var(--muted);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .squadra-head .sqsummary.has{color:var(--hv);font-weight:600}
+  .squadra-head .chev{transition:transform .2s;color:var(--muted)}
+  .squadra-head.open .chev{transform:rotate(180deg)}
+  .sqdone{flex-basis:100%;margin-top:4px;background:var(--hv);color:var(--hvtext);border:none;
+    border-radius:9px;padding:10px;font-weight:700;font-family:inherit;cursor:pointer;font-size:.9rem}
   .checklist{display:flex;flex-wrap:wrap;gap:8px}
   .checklist .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface-2);
     border:1px solid var(--line);border-radius:999px;padding:8px 13px;font-size:.9rem;cursor:pointer;user-select:none}
   .checklist .chip input{accent-color:var(--hv);width:17px;height:17px;margin:0}
   .checklist .chip.on{border-color:var(--hv);background:rgba(158,220,58,.14)}
   .emptycol{font-size:.82rem;color:var(--muted)}
+  .colmanage{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .colmanage .ctag{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:999px;padding:5px 6px 5px 11px;font-size:.85rem}
+  .colmanage .ctag button{border:none;background:none;color:var(--danger);font-size:1.05rem;line-height:1;
+    cursor:pointer;padding:0 4px;font-family:inherit}
   .reset{background:none;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;text-decoration:underline;font-family:inherit}
   .toast{position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-160%);
     background:var(--ok);color:#062015;padding:11px 18px;border-radius:10px;font-weight:700;font-size:.9rem;
@@ -199,8 +213,12 @@
     <h2>Lavoro svolto</h2>
     <label class="switch"><input type="checkbox" id="multiCant"><span class="track"></span><span class="swlabel">Piu cantieri nello stesso giorno</span></label>
     <div class="field" style="margin-bottom:10px">
-      <label>Squadra del giorno &mdash; spunta i presenti (max 4)</label>
-      <div class="checklist" id="squadraList"></div>
+      <div class="squadra-head" id="squadraHead">
+        <span class="sqlabel">Squadra</span>
+        <span class="sqsummary" id="squadraSummary">nessuno selezionato</span>
+        <span class="chev">&#9662;</span>
+      </div>
+      <div class="checklist" id="squadraList" style="display:none;margin-top:8px"></div>
       <input id="squadra" type="hidden">
     </div>
     <datalist id="colleghiList"></datalist>
@@ -305,6 +323,12 @@
         <button class="btn btn-ghost" id="btnImpColleghi" style="width:100%">Importa colleghi da Excel</button>
         <input id="fileColleghi" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none">
         <p class="hintline" id="colInfo" style="margin-top:6px"></p>
+        <div id="colManage" class="colmanage"></div>
+        <div class="two" style="margin-top:8px">
+          <input id="colAdd" type="text" placeholder="Aggiungi sigla (es. GhiselliniL)" autocomplete="off">
+          <button class="btn btn-ghost" id="btnColAdd" style="flex:none;width:auto;padding:0 16px">Aggiungi</button>
+        </div>
+        <button class="reset" id="btnColReset" style="margin-top:8px">Ripristina elenco predefinito</button>
       </div>
       <div class="field">
         <label for="ragione">Intestazione ditta (testo, provvisorio)</label>
@@ -332,7 +356,8 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const DEFAULT_COLLEGHI=["BettoniM", "NervaL", "BellardoneD", "PolifroniA", "DiGiacomoF", "Mehdi", "PinetL", "LoFaroM", "MiattoS", "NicolettaE", "RonconD", "FerrarisE", "Zocca1", "Zocca2", "Artigiano1", "Artigiano2"];
+const DEFAULT_COLLEGHI=["BettoniM", "NervaL", "BellardoneD", "BellardoneE", "GhiselliniL", "PolifroniA", "DiGiacomoF", "Mehdi", "PinetL", "LoFaroM", "MiattoS", "NicolettaE", "RonconD", "FerrarisE", "Zocca1", "Zocca2", "Artigiano1", "Artigiano2"];
+const COLLEGHI_VER=2;
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 function remember(key,val){val=(val||'').trim();if(!val)return;let a=LS.get(key,[]);
@@ -367,7 +392,19 @@ function addRow(desc='',ore='',cant='',colleghi=null){
   $('rows').appendChild(w);
 }
 function ensureRow(){if($('rows').children.length===0)addRow();}
-function normCol(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,4).join(', ');}
+function normCol(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,8).join(', ');}
+function updateSquadraSummary(){
+  const el=$('squadraSummary');if(!el)return;
+  const sel=selectedSquadra();
+  el.textContent=sel.length?sel.join(', '):'nessuno selezionato';
+  el.classList.toggle('has',sel.length>0);
+}
+function openSquadra(open){
+  const list=$('squadraList'),head=$('squadraHead');if(!list||!head)return;
+  const isOpen=(open!==undefined)?open:(list.style.display==='none');
+  list.style.display=isOpen?'flex':'none';
+  head.classList.toggle('open',isOpen);
+}
 function selectedSquadra(){return [...document.querySelectorAll('#squadraList input:checked')].map(function(c){return c.value;});}
 function updateSquadraHidden(){$('squadra').value=selectedSquadra().join(', ');}
 function renderSquadraList(){
@@ -378,22 +415,52 @@ function renderSquadraList(){
   box.innerHTML=names.map(function(n){
     const on=sel.indexOf(n.toLowerCase())>=0;
     return '<label class="chip'+(on?' on':'')+'"><input type="checkbox" value="'+n.replace(/"/g,'&quot;')+'"'+(on?' checked':'')+'>'+n.replace(/</g,'&lt;')+'</label>';
-  }).join('');
+  }).join('')+'<button type="button" class="sqdone" id="sqDone">Fatto</button>';
   [...box.querySelectorAll('input')].forEach(function(c){
     c.addEventListener('change',function(){
-      if(selectedSquadra().length>4){c.checked=false;toast('Massimo 4 in squadra');}
+      if(selectedSquadra().length>8){c.checked=false;toast('Massimo 8 in squadra');}
       c.parentNode.classList.toggle('on',c.checked);
-      updateSquadraHidden();autosave();
+      updateSquadraHidden();updateSquadraSummary();autosave();
     });
   });
+  const done=box.querySelector('#sqDone');
+  if(done)done.addEventListener('click',function(){openSquadra(false);});
+  updateSquadraSummary();
 }
 function syncSquadraChecks(){
   const sel=($('squadra').value||'').split(',').map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
   [...document.querySelectorAll('#squadraList input')].forEach(function(c){
     c.checked=sel.indexOf(c.value.toLowerCase())>=0;c.parentNode.classList.toggle('on',c.checked);
   });
+  updateSquadraSummary();
 }
 function colleghiCount(){return LS.get('colleghi',[]).length;}
+function renderColManage(){
+  const box=$('colManage');if(!box)return;
+  const arr=LS.get('colleghi',[]);
+  if(!arr.length){box.innerHTML='<span class="emptycol">Elenco vuoto.</span>';return;}
+  box.innerHTML=arr.map(function(n,i){
+    return '<span class="ctag">'+n.replace(/</g,'&lt;')+'<button data-i="'+i+'" title="Rimuovi">&times;</button></span>';
+  }).join('');
+  [...box.querySelectorAll('button')].forEach(function(b){
+    b.addEventListener('click',function(){
+      const a=LS.get('colleghi',[]);a.splice(Number(b.dataset.i),1);LS.set('colleghi',a);
+      fillColleghi();renderColManage();refreshColInfo();
+    });
+  });
+}
+function addCollegaManual(){
+  const v=($('colAdd').value||'').trim();if(!v)return;
+  let a=LS.get('colleghi',[]);
+  if(a.some(function(x){return x.toLowerCase()===v.toLowerCase();})){toast('Gia presente');return;}
+  a.push(v);LS.set('colleghi',a.slice(0,300));$('colAdd').value='';
+  fillColleghi();renderColManage();refreshColInfo();toast('Aggiunto '+v);
+}
+function resetColleghi(){
+  if(!confirm('Ripristinare l\'elenco predefinito?\n\nRimette le sigle ufficiali e rimuove le voci aggiunte a mano. L\'archivio non viene toccato.'))return;
+  LS.set('colleghi',DEFAULT_COLLEGHI.slice());LS.set('colleghiInit',true);LS.set('colleghiVer',COLLEGHI_VER);
+  fillColleghi();renderColManage();refreshColInfo();toast('Elenco ripristinato');
+}
 function refreshColInfo(){const el=$('colInfo');if(el)el.textContent=colleghiCount()+' colleghi in memoria (usati nei suggerimenti).';}
 async function importColleghi(file){
   try{
@@ -421,7 +488,7 @@ async function importColleghi(file){
 }
 function fillColleghi(){const dl=$('colleghiList');const sq=LS.get('squadre',[]);const nm=LS.get('colleghi',[]);
   dl.innerHTML=[...sq,...nm].map(v=>'<option value="'+v.replace(/"/g,'&quot;')+'">').join('');
-  renderSquadraList();}
+  renderSquadraList();if(typeof renderColManage==='function')renderColManage();}
 
 function getRows(){return[...$('rows').children].map(r=>({cant:r.querySelector('.cant').value.trim(),
   desc:r.querySelector('.desc').value.trim(),ore:r.querySelector('.ore').value,tipo:r.querySelector('.flag').dataset.tipo,
@@ -1037,10 +1104,10 @@ function applyTheme(t){
   if(meta)meta.setAttribute('content',currentScheme()==='light'?'#eef3ec':'#0d1522');
 }
 function init(){
-  if(!LS.get('colleghiInit',false)){
+  if((LS.get('colleghiVer',0)||0) < COLLEGHI_VER){
     let cur=LS.get('colleghi',[]);
     DEFAULT_COLLEGHI.forEach(function(n){if(!cur.some(function(x){return x.toLowerCase()===n.toLowerCase();}))cur.push(n);});
-    LS.set('colleghi',cur.slice(0,300));LS.set('colleghiInit',true);
+    LS.set('colleghi',cur.slice(0,300));LS.set('colleghiInit',true);LS.set('colleghiVer',COLLEGHI_VER);
   }
   applyTheme(LS.get('tema','dark'));
   [...document.querySelectorAll('#themeSeg button')].forEach(function(b){
@@ -1060,7 +1127,8 @@ function init(){
   $('destinatario').value=LS.get('destinatario','');
   $('ragione').value=LS.get('ragione','');$('sub').value=LS.get('sub','');
   fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');fillDatalist('luoghiList','luoghi');
-  renderSquadraList();
+  renderSquadraList();updateSquadraSummary();
+  $('squadraHead').addEventListener('click',function(){openSquadra();});
   addRow();addRow();addRow();
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
@@ -1085,6 +1153,10 @@ function init(){
   refreshBackupInfo();updateBackupBanner();
   $('btnBannerBackup').addEventListener('click',doExport);
   refreshColInfo();
+  renderColManage();
+  $('btnColAdd').addEventListener('click',addCollegaManual);
+  $('colAdd').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addCollegaManual();}});
+  $('btnColReset').addEventListener('click',resetColleghi);
   $('btnImpColleghi').addEventListener('click',function(){$('fileColleghi').click();});
   $('fileColleghi').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){importColleghi(e.target.files[0]);e.target.value='';}});
   renderArch();
