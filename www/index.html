@@ -133,7 +133,18 @@
   .asum .str b{color:var(--danger)}
   .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .savestate{font-size:.76rem;color:var(--muted)}
+  .bbanner{display:flex;align-items:center;gap:10px;background:var(--surface-2);
+    border:1px solid var(--hv);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+  .bbanner .bbtxt{flex:1;font-size:.83rem;color:var(--text)}
+  .bbanner button{flex:none;background:var(--hv);color:var(--hvtext);border:none;border-radius:8px;
+    padding:8px 12px;font-weight:700;font-size:.83rem;font-family:inherit;cursor:pointer}
   .savestate.ok{color:var(--ok)}
+  .checklist{display:flex;flex-wrap:wrap;gap:8px}
+  .checklist .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:999px;padding:8px 13px;font-size:.9rem;cursor:pointer;user-select:none}
+  .checklist .chip input{accent-color:var(--hv);width:17px;height:17px;margin:0}
+  .checklist .chip.on{border-color:var(--hv);background:rgba(158,220,58,.14)}
+  .emptycol{font-size:.82rem;color:var(--muted)}
   .reset{background:none;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;text-decoration:underline;font-family:inherit}
   .toast{position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-160%);
     background:var(--ok);color:#062015;padding:11px 18px;border-radius:10px;font-weight:700;font-size:.9rem;
@@ -151,6 +162,10 @@
     <span class="file-hint">file: <b id="fileName">—</b></span>
   </header>
 
+  <div class="bbanner" id="backupBanner" style="display:none">
+    <span class="bbtxt"></span>
+    <button id="btnBannerBackup">Backup ora</button>
+  </div>
   <div class="toolbar"><span class="savestate" id="saveState">salvataggio automatico attivo</span><button class="reset" id="btnReset">Nuovo report</button></div>
 
   <div class="card">
@@ -184,8 +199,9 @@
     <h2>Lavoro svolto</h2>
     <label class="switch"><input type="checkbox" id="multiCant"><span class="track"></span><span class="swlabel">Piu cantieri nello stesso giorno</span></label>
     <div class="field" style="margin-bottom:10px">
-      <label for="squadra">Squadra del giorno &mdash; tutti insieme, max 4 (appare una riga in fondo)</label>
-      <input id="squadra" type="text" placeholder="Es. Rossi, Bianchi, Verdi" list="colleghiList" autocomplete="off">
+      <label>Squadra del giorno &mdash; spunta i presenti (max 4)</label>
+      <div class="checklist" id="squadraList"></div>
+      <input id="squadra" type="hidden">
     </div>
     <datalist id="colleghiList"></datalist>
     <div class="oreh"><span class="l">Descrizione</span><span class="r">Ore</span><span class="s"></span></div>
@@ -285,6 +301,12 @@
         <input id="soglia" type="number" step="0.5" min="0" value="8">
       </div>
       <div class="field">
+        <label>Colleghi (per i suggerimenti)</label>
+        <button class="btn btn-ghost" id="btnImpColleghi" style="width:100%">Importa colleghi da Excel</button>
+        <input id="fileColleghi" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none">
+        <p class="hintline" id="colInfo" style="margin-top:6px"></p>
+      </div>
+      <div class="field">
         <label for="ragione">Intestazione ditta (testo, provvisorio)</label>
         <input id="ragione" type="text" placeholder="Ragione sociale" autocomplete="off">
       </div>
@@ -345,8 +367,60 @@ function addRow(desc='',ore='',cant='',colleghi=null){
 }
 function ensureRow(){if($('rows').children.length===0)addRow();}
 function normCol(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,4).join(', ');}
+function selectedSquadra(){return [...document.querySelectorAll('#squadraList input:checked')].map(function(c){return c.value;});}
+function updateSquadraHidden(){$('squadra').value=selectedSquadra().join(', ');}
+function renderSquadraList(){
+  const box=$('squadraList');if(!box)return;
+  const names=LS.get('colleghi',[]);
+  const sel=($('squadra').value||'').split(',').map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
+  if(!names.length){box.innerHTML='<span class="emptycol">Nessun collega in elenco. Importalo dalle Impostazioni.</span>';return;}
+  box.innerHTML=names.map(function(n){
+    const on=sel.indexOf(n.toLowerCase())>=0;
+    return '<label class="chip'+(on?' on':'')+'"><input type="checkbox" value="'+n.replace(/"/g,'&quot;')+'"'+(on?' checked':'')+'>'+n.replace(/</g,'&lt;')+'</label>';
+  }).join('');
+  [...box.querySelectorAll('input')].forEach(function(c){
+    c.addEventListener('change',function(){
+      if(selectedSquadra().length>4){c.checked=false;toast('Massimo 4 in squadra');}
+      c.parentNode.classList.toggle('on',c.checked);
+      updateSquadraHidden();autosave();
+    });
+  });
+}
+function syncSquadraChecks(){
+  const sel=($('squadra').value||'').split(',').map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
+  [...document.querySelectorAll('#squadraList input')].forEach(function(c){
+    c.checked=sel.indexOf(c.value.toLowerCase())>=0;c.parentNode.classList.toggle('on',c.checked);
+  });
+}
+function colleghiCount(){return LS.get('colleghi',[]).length;}
+function refreshColInfo(){const el=$('colInfo');if(el)el.textContent=colleghiCount()+' colleghi in memoria (usati nei suggerimenti).';}
+async function importColleghi(file){
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws=wb.worksheets[0];
+    if(!ws){alert('Il file non contiene fogli.');return;}
+    let arr=LS.get('colleghi',[]);
+    let add=0;
+    ws.eachRow({includeEmpty:false},function(row,rn){
+      let parts=[];
+      row.eachCell({includeEmpty:false},function(cell){const t=String(cell.text||'').trim();if(t)parts.push(t);});
+      let name=parts.join(' ').replace(/\s+/g,' ').trim();
+      if(!name)return;
+      const low=name.toLowerCase();
+      if(rn===1&&/(nome|cognome|collega|colleghi|dipendent|elenco|sigla|squadra|abbrevi)/.test(low))return; // salta intestazione
+      if(name.charAt(0)==='(')return; // salta note
+      if(!arr.some(function(x){return x.toLowerCase()===low;})){arr.push(name);add++;}
+    });
+    LS.set('colleghi',arr.slice(0,300));
+    fillColleghi();refreshColInfo();
+    alert('Importati '+add+' colleghi.\n\nOra compaiono nei suggerimenti di "Squadra del giorno" e nel campo colleghi delle righe.');
+  }catch(e){alert('File non valido o non leggibile: '+errMsg(e));}
+}
 function fillColleghi(){const dl=$('colleghiList');const sq=LS.get('squadre',[]);const nm=LS.get('colleghi',[]);
-  dl.innerHTML=[...sq,...nm].map(v=>'<option value="'+v.replace(/"/g,'&quot;')+'">').join('');}
+  dl.innerHTML=[...sq,...nm].map(v=>'<option value="'+v.replace(/"/g,'&quot;')+'">').join('');
+  renderSquadraList();}
 
 function getRows(){return[...$('rows').children].map(r=>({cant:r.querySelector('.cant').value.trim(),
   desc:r.querySelector('.desc').value.trim(),ore:r.querySelector('.ore').value,tipo:r.querySelector('.flag').dataset.tipo,
@@ -622,7 +696,7 @@ function loadDay(iso,silent){
   $('multiCant').checked=!!d.multi;setMulti(!!d.multi);
   if(!d.multi)$('cantiere').value=d.cantiere||'';
   $('luogo').value=d.luogo||'';$('trasferta').checked=!!d.trasferta;
-  $('squadra').value=d.squadra||'';$('note').value=d.note||'';
+  $('squadra').value=d.squadra||'';syncSquadraChecks();$('note').value=d.note||'';
   $('rows').innerHTML='';
   (d.raw||[]).forEach(r=>{
     addRow(r.desc||'',r.ore||'',r.cant||'',r.colleghi||'');
@@ -770,8 +844,15 @@ async function doExport(){
       await P.Share.share({title:'Backup rapportino',files:[w.uri],dialogTitle:'Salva il backup'});
     }else{
       const blob=new Blob([json],{type:'application/json'});
-      download(blob,name);
+      const file=new File([blob],name,{type:'application/json'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'Backup rapportino'});
+      }else{
+        download(blob,name);
+      }
     }
+    LS.set('lastBackup',todayISO());
+    refreshBackupInfo();updateBackupBanner();
     toast('Backup creato ('+n+' giorni)');
   }catch(e){const m=errMsg(e);if(!/cancel/i.test(m))toast('Errore backup: '+m,true);}
 }
@@ -811,9 +892,30 @@ function doImportFile(file){
   rd.onerror=function(){alert('Impossibile leggere il file.');};
   rd.readAsText(file);
 }
+function daysSinceBackup(){
+  const lb=LS.get('lastBackup','');
+  if(!lb)return null;
+  const a=new Date(lb+'T12:00:00'), b=new Date(todayISO()+'T12:00:00');
+  return Math.round((b-a)/86400000);
+}
 function refreshBackupInfo(){
   const n=Object.keys(loadArch()).length;
-  const el=$('backupInfo');if(el)el.innerHTML='In archivio: <b>'+n+'</b> giorni. Il backup salva tutto in un file da tenere su Drive.';
+  const el=$('backupInfo');if(!el)return;
+  const d=daysSinceBackup();
+  let s='In archivio: <b>'+n+'</b> giorni. ';
+  if(d===null)s+='Nessun backup ancora effettuato.';
+  else if(d===0)s+='Ultimo backup: <b>oggi</b>.';
+  else s+='Ultimo backup: <b>'+d+' giorni fa</b>.';
+  el.innerHTML=s;
+}
+function updateBackupBanner(){
+  const el=$('backupBanner');if(!el)return;
+  const n=Object.keys(loadArch()).length;
+  const d=daysSinceBackup();
+  const serve=n>0&&(d===null||d>=7);
+  el.style.display=serve?'flex':'none';
+  if(serve)el.querySelector('.bbtxt').textContent=
+    (d===null?'Non hai mai fatto un backup dei tuoi rapportini.':'Ultimo backup '+d+' giorni fa.');
 }
 async function doMonth(){
   const r=activeRange();
@@ -952,6 +1054,7 @@ function init(){
   $('destinatario').value=LS.get('destinatario','');
   $('ragione').value=LS.get('ragione','');$('sub').value=LS.get('sub','');
   fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');fillDatalist('luoghiList','luoghi');
+  renderSquadraList();
   addRow();addRow();addRow();
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
@@ -973,7 +1076,11 @@ function init(){
   $('btnExport').addEventListener('click',doExport);
   $('btnImport').addEventListener('click',function(){$('importFile').click();});
   $('importFile').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){doImportFile(e.target.files[0]);e.target.value='';}});
-  refreshBackupInfo();
+  refreshBackupInfo();updateBackupBanner();
+  $('btnBannerBackup').addEventListener('click',doExport);
+  refreshColInfo();
+  $('btnImpColleghi').addEventListener('click',function(){$('fileColleghi').click();});
+  $('fileColleghi').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){importColleghi(e.target.files[0]);e.target.value='';}});
   renderArch();
   const de=LS.get('diagErr','');
   $('diag').innerHTML=de?('<b>Ultimo errore invio:</b> '+String(de).replace(/</g,'&lt;')):'Invio: nessun errore registrato.';
