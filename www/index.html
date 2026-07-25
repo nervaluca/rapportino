@@ -332,6 +332,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
+const DEFAULT_COLLEGHI=["BettoniM", "NervaL", "BellardoneD", "PolifroniA", "DiGiacomoF", "Mehdi", "PinetL", "LoFaroM", "MiattoS", "NicolettaE", "RonconD", "FerrarisE", "Zocca1", "Zocca2", "Artigiano1", "Artigiano2"];
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 function remember(key,val){val=(val||'').trim();if(!val)return;let a=LS.get(key,[]);
@@ -1036,6 +1037,11 @@ function applyTheme(t){
   if(meta)meta.setAttribute('content',currentScheme()==='light'?'#eef3ec':'#0d1522');
 }
 function init(){
+  if(!LS.get('colleghiInit',false)){
+    let cur=LS.get('colleghi',[]);
+    DEFAULT_COLLEGHI.forEach(function(n){if(!cur.some(function(x){return x.toLowerCase()===n.toLowerCase();}))cur.push(n);});
+    LS.set('colleghi',cur.slice(0,300));LS.set('colleghiInit',true);
+  }
   applyTheme(LS.get('tema','dark'));
   [...document.querySelectorAll('#themeSeg button')].forEach(function(b){
     b.addEventListener('click',function(){applyTheme(b.dataset.theme);});
