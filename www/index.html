@@ -160,6 +160,17 @@
   .colmanage .ctag button{border:none;background:none;color:var(--danger);font-size:1.05rem;line-height:1;
     cursor:pointer;padding:0 4px;font-family:inherit}
   .reset{background:none;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;text-decoration:underline;font-family:inherit}
+  .dlbanner{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:60}
+  .dlb-in{display:flex;gap:12px;align-items:flex-start;background:var(--surface-2);
+    border:2px solid var(--hv);border-radius:14px;padding:14px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+  .dlb-ico{font-size:1.5rem;color:var(--hv);line-height:1.2;flex:none}
+  .dlb-txt{flex:1;display:flex;flex-direction:column;gap:3px;font-size:.9rem;color:var(--text)}
+  .dlb-txt b{color:var(--text)}
+  .dlb-txt #dlbName{font-size:.8rem;color:var(--hv);font-weight:700;word-break:break-all}
+  .dlb-hint{font-size:.82rem;color:var(--muted);margin-top:3px}
+  .dlb-open{align-self:flex-start;margin-top:8px;background:var(--hv);color:var(--hvtext);border:none;
+    border-radius:9px;padding:9px 16px;font-weight:700;font-size:.88rem;font-family:inherit;cursor:pointer}
+  .dlb-x{flex:none;background:none;border:none;color:var(--muted);font-size:1.4rem;line-height:1;cursor:pointer;font-family:inherit}
   .toast{position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-160%);
     background:var(--ok);color:#062015;padding:11px 18px;border-radius:10px;font-weight:700;font-size:.9rem;
     z-index:40;transition:transform .3s;box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:88vw;text-align:center}
@@ -348,16 +359,65 @@
 
 <div class="bar">
   <div class="bar-inner"><button class="btn btn-primary" id="btnSend">Invia rapportino</button></div>
-  <div class="bar-inner" style="margin-top:8px">
-    <button class="btn btn-ghost" id="btnDownload">Scarica</button>
-  </div>
 </div>
 
+<div class="dlbanner" id="dlBanner" style="display:none">
+  <div class="dlb-in">
+    <div class="dlb-ico">&#11015;</div>
+    <div class="dlb-txt">
+      <b>Rapportino salvato nei Download</b>
+      <span id="dlbName"></span>
+      <span class="dlb-hint" id="dlbHint"></span>
+      <button class="dlb-open" id="dlbOpen">Apri file</button>
+    </div>
+    <button class="dlb-x" id="dlbClose" title="Chiudi">&times;</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
-const DEFAULT_COLLEGHI=["BettoniM", "NervaL", "BellardoneD", "BellardoneE", "GhiselliniL", "PolifroniA", "DiGiacomoF", "Mehdi", "PinetL", "LoFaroM", "MiattoS", "NicolettaE", "RonconD", "FerrarisE", "Zocca1", "Zocca2", "Artigiano1", "Artigiano2"];
-const COLLEGHI_VER=2;
+const DEFAULT_COLLEGHI=["BettoniM", "NervaL", "BellardoneD", "BellardoneE", "GhiselliniL", "PollifroniA", "DiGiacomoF", "Mehdi", "PinetL", "LoFaroM", "MiattoS", "NicolettaE", "RonconD", "FerrarisE", "Zocca1", "Zocca2", "Artigiano1", "Artigiano2"];
+const COLLEGHI_VER=3;
+function mergeUnique(){var out=[],seen={};for(var i=0;i<arguments.length;i++){(arguments[i]||[]).forEach(function(v){var k=String(v).toLowerCase();if(v&&!seen[k]){seen[k]=1;out.push(v);}});}return out;}
+function fillCantieri(){var dl=document.getElementById('cantieriList');if(!dl)return;
+  dl.innerHTML=mergeUnique(LS.get('cantieriServer',[]),LS.get('cantieri',[])).map(function(v){return '<option value="'+String(v).replace(/"/g,'&quot;')+'">';}).join('');}
+function fillLuoghi(){var dl=document.getElementById('luoghiList');if(!dl)return;
+  dl.innerHTML=mergeUnique(LS.get('luoghiServer',[]),LS.get('luoghi',[])).map(function(v){return '<option value="'+String(v).replace(/"/g,'&quot;')+'">';}).join('');}
+const SERVER_BASE='https://iw1fzr.it/rapportino/';
+function dataUrl(file){return (isNative()?SERVER_BASE:'./')+file+'?ts='+Date.now();}
+async function syncFromServer(){
+  // COLLEGHI: il server sostituisce (solo quando cambia la versione del file)
+  try{
+    var r=await fetch(dataUrl('colleghi.json'),{cache:'no-store'});
+    if(r.ok){var j=await r.json();
+      if(j&&Array.isArray(j.colleghi)){
+        var ver=(j.version==null?1:j.version);
+        if(ver!==LS.get('colleghiServerVer',null)){
+          LS.set('colleghi',j.colleghi.slice(0,300));
+          LS.set('colleghiServerVer',ver);LS.set('colleghiVer',COLLEGHI_VER);
+          fillColleghi();if(typeof renderColManage==='function')renderColManage();
+        }
+      }
+    }
+  }catch(e){}
+  // CANTIERI: si aggiungono ai suggerimenti (nome + eventuale luogo)
+  try{
+    var r2=await fetch(dataUrl('cantieri.json'),{cache:'no-store'});
+    if(r2.ok){var j2=await r2.json();
+      if(j2&&Array.isArray(j2.cantieri)){
+        var nomi=[],luoghi=[];
+        j2.cantieri.forEach(function(x){
+          if(typeof x==='string'){if(x)nomi.push(x);}
+          else if(x&&x.nome){nomi.push(x.nome);if(x.luogo)luoghi.push(x.luogo);}
+        });
+        LS.set('cantieriServer',nomi.slice(0,800));
+        LS.set('luoghiServer',luoghi.slice(0,800));
+        fillCantieri();fillLuoghi();
+      }
+    }
+  }catch(e){}
+}
+const OBSOLETE_COLLEGHI=["PolifroniA"];
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 function remember(key,val){val=(val||'').trim();if(!val)return;let a=LS.get(key,[]);
@@ -594,7 +654,7 @@ function persist(d){
   const sq=normCol($('squadra').value);if(sq)remember('squadre',sq);
   [...document.querySelectorAll('#rows .colleghi')].forEach(i=>normCol(i.value).split(', ').forEach(n=>{if(n)remember('colleghi',n);}));
   fillColleghi();
-  fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');
+  fillCantieri();fillDatalist('descList','descrizioni');
   LS.set('soglia',Number($('soglia').value)||8);
   saveDay(d);
 }
@@ -641,25 +701,65 @@ async function nativeSend(blob,name,d){
       '\n\nUsa "Scarica" e allega il file a mano. Riferisci questo messaggio.');
   }
 }
-async function doShare(){
+let _dlUrl=null;
+function showDownloadBanner(name,blob){
+  const b=$('dlBanner');if(!b)return;
+  $('dlbName').textContent=name;
+  if(_dlUrl){try{URL.revokeObjectURL(_dlUrl);}catch(e){}}
+  _dlUrl=blob?URL.createObjectURL(blob):null;
+  if($('dlbOpen'))$('dlbOpen').style.display=_dlUrl?'inline-block':'none';
+  const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone;
+  $('dlbHint').innerHTML=standalone
+    ?'\u00c8 nella cartella <b>Download</b>. Premi <b>Apri file</b> qui sotto (oppure aprilo dall\'app <b>File</b> &rarr; Download), poi <b>Condividi</b> &rarr; Gmail o WhatsApp.'
+    :'Tocca la <b>notifica di download</b> in alto, oppure aprilo dai <b>Download</b>, poi <b>Condividi</b>.';
+  b.style.display='block';
+}
+function openDownloaded(){if(_dlUrl){try{window.open(_dlUrl,'_blank');}catch(e){}}}
+function hideDownloadBanner(){const b=$('dlBanner');if(b)b.style.display='none';}
+function isiOSdev(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);}
+function sendLabel(){return (isiOSdev()||isNative())?'Invia rapportino':'Scarica rapportino';}
+function doShare(){
   const d=collect();if(!validate(d))return;
-  const btn=$('btnSend');btn.disabled=true;btn.textContent='Genero…';
-  try{
-    const blob=await buildBlob(d);const name=fileBase(d.iso)+'.xlsx';persist(d);
-    if(isNative()){await nativeSend(blob,name,d);return;}
-    const file=new File([blob],name,{type:blob.type});
-    let done=false;
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      try{await navigator.share({files:[file],title:'Rapportino '+ddmmyy(d.iso)});done=true;}
-      catch(e){if(e.name==='AbortError')done=true;} // annullato = ok, niente fallback
+  const name=fileBase(d.iso)+'.xlsx';
+  const tit='Rapportino '+ddmmyy(d.iso);
+  const sig=shareSig(d);
+  const iOS=isiOSdev();
+
+  // conclude l'invio con un file gia' costruito
+  function finish(blob){
+    // iOS: la condivisione funziona -> apro il foglio di sistema
+    if(iOS&&navigator.canShare){
+      const f=new File([blob],name,{type:blob.type||'application/octet-stream'});
+      if(navigator.canShare({files:[f]})){
+        navigator.share({files:[f],title:tit}).then(function(){persist(d);})
+          .catch(function(e){
+            if(e&&e.name==='AbortError')return;
+            download(blob,name);persist(d);toast('Rapportino scaricato');
+          });
+        return;
+      }
     }
-    if(!done){
-      download(blob,name);
-      if(d.destinatario){openMail(d);toast('File scaricato — allega all\'email aperta');}
-      else{toast('File scaricato (imposta il destinatario per l\'invio email)');}
-    }
-  }catch(e){toast('Errore: '+e.message,true);}
-  finally{btn.disabled=false;btn.textContent='Invia rapportino';}
+    // Android / PC: download affidabile, poi si condivide dai Download
+    download(blob,name);persist(d);
+    showDownloadBanner(name,blob);
+  }
+
+  // APK nativo: salvataggio/condivisione nativa
+  if(isNative()){
+    const btn=$('btnSend');btn.disabled=true;btn.textContent='Preparo…';
+    (async function(){try{const blob=await buildBlob(d);persist(d);await nativeSend(blob,name,d);}
+      catch(e){toast('Errore: '+e.message,true);}finally{btn.disabled=false;btn.textContent=sendLabel();}})();
+    return;
+  }
+
+  // web: uso il file gia' pronto (serve a iOS per restare dentro il tocco), altrimenti lo genero
+  if(_shareBlob&&_shareSig===sig){finish(_shareBlob);return;}
+  const btn=$('btnSend');btn.disabled=true;btn.textContent='Preparo…';
+  (async function(){
+    try{const blob=await buildBlob(d);_shareBlob=blob;_shareName=name;_shareSig=sig;finish(blob);}
+    catch(e){toast('Errore: '+e.message,true);}
+    finally{btn.disabled=false;btn.textContent=sendLabel();}
+  })();
 }
 async function saveNative(blob,name){
   const P=window.Capacitor.Plugins;const data=await blobB64(blob);let last='';
@@ -912,16 +1012,21 @@ async function doExport(){
       await P.Share.share({title:'Backup rapportino',files:[w.uri],dialogTitle:'Salva il backup'});
     }else{
       const blob=new Blob([json],{type:'application/json'});
-      const file=new File([blob],name,{type:'application/json'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){
-        await navigator.share({files:[file],title:'Backup rapportino'});
+      const isiOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      if(isiOS&&navigator.canShare){
+        const file=new File([blob],name,{type:'application/json'});
+        try{
+          if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Backup rapportino'});}
+          else{download(blob,name);}
+        }catch(e){if(/cancel|abort/i.test(errMsg(e)))return;download(blob,name);}
       }else{
+        // Android / PC: download diretto, affidabile
         download(blob,name);
       }
     }
     LS.set('lastBackup',todayISO());
     refreshBackupInfo();updateBackupBanner();
-    toast('Backup creato ('+n+' giorni)');
+    toast('Backup salvato ('+n+' giorni)');
   }catch(e){const m=errMsg(e);if(!/cancel/i.test(m))toast('Errore backup: '+m,true);}
 }
 function mergeBackup(obj,replace){
@@ -952,7 +1057,7 @@ function doImportFile(file){
       const tot=mergeBackup(obj,doReplace);
       $('dipendente').value=LS.get('dipendente',$('dipendente').value);
       $('soglia').value=LS.get('soglia',8);
-      fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');fillColleghi();
+      fillCantieri();fillDatalist('descList','descrizioni');fillColleghi();
       renderArch();refreshBackupInfo();
       alert('Importato. Ora in archivio: '+tot+' giorni.');
     }catch(e){alert('File non valido: '+errMsg(e));}
@@ -1009,11 +1114,14 @@ async function doMonth(){
       }catch(e){const msg=errMsg(e);if(!/cancel/i.test(msg)){LS.set('diagErr','share riepilogo: '+msg);
         alert('Invio riepilogo non riuscito.\n\nErrore: '+msg+'\n\nUsa \'Scarica\' e allega a mano.');}}
     }else{
-      const file=new File([blob],name,{type:blob.type});
       let done=false;
-      if(navigator.canShare&&navigator.canShare({files:[file]})){
-        try{await navigator.share({files:[file],title:title});done=true;}
-        catch(e){if(e.name==='AbortError')done=true;}
+      if(navigator.share){
+        const shareAs=async function(mime){const f=new File([blob],name,{type:mime});await navigator.share({files:[f],title:title});};
+        try{await shareAs(blob.type||'application/octet-stream');done=true;}
+        catch(e){
+          if(e&&e.name==='AbortError')done=true;
+          else{try{await shareAs('application/octet-stream');done=true;}catch(e2){if(e2&&e2.name==='AbortError')done=true;}}
+        }
       }
       if(!done){download(blob,name);toast('Riepilogo scaricato');}
     }
@@ -1026,7 +1134,22 @@ function doSaveDay(){
 }
 /* ---------- salvataggio automatico ---------- */
 let _svT=null;
+let _shareBlob=null,_shareName='',_shareSig='',_pgT=null;
 function hasContent(){return getRows().some(function(r){return r.desc!==''||(r.ore!==''&&r.ore!=null);});}
+function shareSig(d){try{return JSON.stringify(d);}catch(e){return Math.random()+'';}}
+function readyToShare(d){return d&&d.dipendente&&d.cantiere&&d.righe&&d.righe.length>0;}
+async function pregenShare(){
+  // genera il file in anticipo, cosi' l'invio parte dentro il tocco (Android)
+  try{
+    const d=collect();
+    if(!readyToShare(d)){_shareBlob=null;_shareSig='';return;}
+    const sig=shareSig(d);
+    if(sig===_shareSig&&_shareBlob)return; // gia' pronto
+    const blob=await buildBlob(d);
+    _shareBlob=blob;_shareName=fileBase(d.iso)+'.xlsx';_shareSig=sig;
+  }catch(e){}
+}
+function schedulePregen(){clearTimeout(_pgT);_pgT=setTimeout(pregenShare,900);}
 function markSaved(){
   const n=new Date();
   const hh=('0'+n.getHours()).slice(-2),mm=('0'+n.getMinutes()).slice(-2);
@@ -1055,6 +1178,7 @@ function flushSave(){
     if(!d.iso)return;
     saveDay(d);markSaved();
   }catch(e){}
+  schedulePregen();
 }
 function autosave(){clearTimeout(_svT);_svT=setTimeout(flushSave,700);}
 function wireAutosave(){
@@ -1106,6 +1230,7 @@ function applyTheme(t){
 function init(){
   if((LS.get('colleghiVer',0)||0) < COLLEGHI_VER){
     let cur=LS.get('colleghi',[]);
+    cur=cur.filter(function(n){return !OBSOLETE_COLLEGHI.some(function(o){return o.toLowerCase()===n.toLowerCase();});});
     DEFAULT_COLLEGHI.forEach(function(n){if(!cur.some(function(x){return x.toLowerCase()===n.toLowerCase();}))cur.push(n);});
     LS.set('colleghi',cur.slice(0,300));LS.set('colleghiInit',true);LS.set('colleghiVer',COLLEGHI_VER);
   }
@@ -1126,8 +1251,10 @@ function init(){
   $('cantiere').value=LS.get('lastCantiere','');
   $('destinatario').value=LS.get('destinatario','');
   $('ragione').value=LS.get('ragione','');$('sub').value=LS.get('sub','');
-  fillDatalist('cantieriList','cantieri');fillDatalist('descList','descrizioni');fillDatalist('luoghiList','luoghi');
+  fillCantieri();fillDatalist('descList','descrizioni');fillLuoghi();
   renderSquadraList();updateSquadraSummary();
+  syncFromServer();
+  setTimeout(pregenShare,1200);
   $('squadraHead').addEventListener('click',function(){openSquadra();});
   addRow();addRow();addRow();
   fillColleghi();
@@ -1160,10 +1287,12 @@ function init(){
   $('btnImpColleghi').addEventListener('click',function(){$('fileColleghi').click();});
   $('fileColleghi').addEventListener('change',function(e){if(e.target.files&&e.target.files[0]){importColleghi(e.target.files[0]);e.target.value='';}});
   renderArch();
-  const de=LS.get('diagErr','');
+  const de=LS.get('diagErr','')+(LS.get('diagShare','')?('  |  '+LS.get('diagShare','')):'');
   $('diag').innerHTML=de?('<b>Ultimo errore invio:</b> '+String(de).replace(/</g,'&lt;')):'Invio: nessun errore registrato.';
-  $('btnSend').addEventListener('click',doShare);
-  $('btnDownload').addEventListener('click',doDownload);
+  $('btnSend').addEventListener('click',function(){hideDownloadBanner();doShare();});
+  $('btnSend').textContent=sendLabel();
+  $('dlbClose').addEventListener('click',hideDownloadBanner);
+  $('dlbOpen').addEventListener('click',openDownloaded);
   $('btnReset').addEventListener('click',()=>{if(confirm('Svuotare il report? (dipendente e cantiere restano)'))newReport();});
 }
 init();
