@@ -361,18 +361,6 @@
   <div class="bar-inner"><button class="btn btn-primary" id="btnSend">Invia rapportino</button></div>
 </div>
 
-<div class="dlbanner" id="dlBanner" style="display:none">
-  <div class="dlb-in">
-    <div class="dlb-ico">&#11015;</div>
-    <div class="dlb-txt">
-      <b>Rapportino salvato nei Download</b>
-      <span id="dlbName"></span>
-      <span class="dlb-hint" id="dlbHint"></span>
-      <button class="dlb-open" id="dlbOpen">Apri file</button>
-    </div>
-    <button class="dlb-x" id="dlbClose" title="Chiudi">&times;</button>
-  </div>
-</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -386,6 +374,7 @@ function fillLuoghi(){var dl=document.getElementById('luoghiList');if(!dl)return
 const SERVER_BASE='https://iw1fzr.it/rapportino/';
 function dataUrl(file){return (isNative()?SERVER_BASE:'./')+file+'?ts='+Date.now();}
 async function syncFromServer(){
+  function hhmm(){var n=new Date();return ('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2);}
   // COLLEGHI: il server sostituisce (solo quando cambia la versione del file)
   try{
     var r=await fetch(dataUrl('colleghi.json'),{cache:'no-store'});
@@ -397,9 +386,11 @@ async function syncFromServer(){
           LS.set('colleghiServerVer',ver);LS.set('colleghiVer',COLLEGHI_VER);
           fillColleghi();if(typeof renderColManage==='function')renderColManage();
         }
-      }
-    }
-  }catch(e){}
+        LS.set('syncColl','ok '+hhmm()+' (v'+ver+', '+j.colleghi.length+' nomi)');
+      }else{LS.set('syncColl','file server non valido');}
+    }else{LS.set('syncColl','errore server: HTTP '+r.status);}
+  }catch(e){LS.set('syncColl','non raggiunto: '+(e&&e.message||e));}
+  if(typeof refreshColInfo==='function')refreshColInfo();
   // CANTIERI: si aggiungono ai suggerimenti (nome + eventuale luogo)
   try{
     var r2=await fetch(dataUrl('cantieri.json'),{cache:'no-store'});
@@ -521,7 +512,11 @@ function resetColleghi(){
   LS.set('colleghi',DEFAULT_COLLEGHI.slice());LS.set('colleghiInit',true);LS.set('colleghiVer',COLLEGHI_VER);
   fillColleghi();renderColManage();refreshColInfo();toast('Elenco ripristinato');
 }
-function refreshColInfo(){const el=$('colInfo');if(el)el.textContent=colleghiCount()+' colleghi in memoria (usati nei suggerimenti).';}
+function refreshColInfo(){const el=$('colInfo');if(!el)return;
+  var s=colleghiCount()+' colleghi in memoria.';
+  var sc=LS.get('syncColl','');
+  if(sc)s+=' Server: '+sc;
+  el.textContent=s;}
 async function importColleghi(file){
   try{
     const buf=await file.arrayBuffer();
@@ -741,7 +736,7 @@ function doShare(){
     }
     // Android / PC: download affidabile, poi si condivide dai Download
     download(blob,name);persist(d);
-    showDownloadBanner(name,blob);
+    toast('Rapportino scaricato nei Download');
   }
 
   // APK nativo: salvataggio/condivisione nativa
@@ -1289,10 +1284,8 @@ function init(){
   renderArch();
   const de=LS.get('diagErr','')+(LS.get('diagShare','')?('  |  '+LS.get('diagShare','')):'');
   $('diag').innerHTML=de?('<b>Ultimo errore invio:</b> '+String(de).replace(/</g,'&lt;')):'Invio: nessun errore registrato.';
-  $('btnSend').addEventListener('click',function(){hideDownloadBanner();doShare();});
+  $('btnSend').addEventListener('click',doShare);
   $('btnSend').textContent=sendLabel();
-  $('dlbClose').addEventListener('click',hideDownloadBanner);
-  $('dlbOpen').addEventListener('click',openDownloaded);
   $('btnReset').addEventListener('click',()=>{if(confirm('Svuotare il report? (dipendente e cantiere restano)'))newReport();});
 }
 init();
