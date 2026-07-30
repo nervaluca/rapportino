@@ -422,6 +422,16 @@ async function syncFromServer(){
       }
     }
   }catch(e){}
+  // COMUNI: rimborso trasferta per comune
+  try{
+    var r3=await fetch(dataUrl('comuni.json'),{cache:'no-store'});
+    if(r3.ok){var j3=await r3.json();
+      if(j3&&Array.isArray(j3.comuni)){
+        var cm={};j3.comuni.forEach(function(x){if(x&&x.comune)cm[String(x.comune).toLowerCase()]=Number(x.rimborso)||0;});
+        LS.set('comuniMap',cm);
+      }
+    }
+  }catch(e){}
 }
 const OBSOLETE_COLLEGHI=["PolifroniA"];
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
@@ -941,15 +951,21 @@ async function buildMonthly(r){
       cc.font={name:'Calibri',size:11,bold:true};cc.alignment={horizontal:x[2]};cc.border=box;grey(cc);});
   ws.getRow(rr).height=21;rr++;
   let tot=0,str=0;const perCant={};let anyTras=false;
+  const comuni=LS.get('comuniMap',{});
+  function rimborsoOf(luogo){var k=(luogo||'').trim().toLowerCase();return Number(comuni[k]||0);}
+  let euroTot=0, gTrasAuto=0;
   days.forEach(function(d){
     const s=strOf(d.tot);tot+=Number(d.tot)||0;str+=s;
+    const rb=rimborsoOf(d.luogo);const isTras=d.trasferta||rb>0;
+    if(rb>0)euroTot+=rb;
+    if(isTras)gTrasAuto++;
     const p=d.iso.split('-');
     let cc=ws.getCell('B'+rr);cc.value=p[2]+'/'+p[1]+'/'+p[0].slice(2);
     cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'left'};cc.border=box;
     cc=ws.getCell('C'+rr);
-    cc.value=(d.cantiere||'')+(d.luogo?(' - '+d.luogo):'')+(d.trasferta?'  [T]':'');
-    cc.font={name:'Calibri',size:11,bold:d.trasferta?true:false};
-    if(d.trasferta){cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF2CC'}};anyTras=true;}
+    cc.value=(d.cantiere||'')+(d.luogo?(' - '+d.luogo):'')+(isTras?'  [T]':'');
+    cc.font={name:'Calibri',size:11,bold:isTras?true:false};
+    if(isTras){cc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF2CC'}};anyTras=true;}
     cc.alignment={horizontal:'left',wrapText:true};cc.border=box;
     cc=ws.getCell('D'+rr);cc.value=+(Number(d.tot)||0).toFixed(2);
     cc.font={name:'Calibri',size:11};cc.alignment={horizontal:'center'};cc.border=box;
@@ -977,8 +993,8 @@ async function buildMonthly(r){
   const righeSum=[['Giorni lavorati',gLav],['Ore ordinarie',+(tot-str).toFixed(2)],
    ['Ore straordinarie',+str.toFixed(2)]];
   if(gFerie)righeSum.push(['Giorni ferie/permesso',gFerie]);
-  const gTras=days.filter(function(d){return d.trasferta;}).length;
-  if(gTras)righeSum.push(['Giorni di trasferta',gTras]);
+  if(gTrasAuto)righeSum.push(['Giorni di trasferta',gTrasAuto]);
+  if(euroTot>0)righeSum.push(['Rimborso trasferte',euroTot.toFixed(2).replace('.',',')+' \u20ac']);
   righeSum.forEach(function(x){
     ws.mergeCells('B'+rr+':C'+rr);const a=ws.getCell('B'+rr);a.value=x[0]+':';
     a.font={name:'Calibri',size:11,bold:true};a.alignment={horizontal:'right'};
