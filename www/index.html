@@ -367,6 +367,19 @@
 const DEFAULT_COLLEGHI=["BettoniM", "NervaL", "BellardoneD", "BellardoneE", "GhiselliniL", "PollifroniA", "DiGiacomoF", "Mehdi", "PinetL", "LoFaroM", "MiattoS", "NicolettaE", "RonconD", "FerrarisE", "Zocca1", "Zocca2", "Artigiano1", "Artigiano2"];
 const COLLEGHI_VER=3;
 function mergeUnique(){var out=[],seen={};for(var i=0;i<arguments.length;i++){(arguments[i]||[]).forEach(function(v){var k=String(v).toLowerCase();if(v&&!seen[k]){seen[k]=1;out.push(v);}});}return out;}
+var _lastAutoLuogo='';
+function autoLuogoFromCantiere(){
+  var map=LS.get('cantieriMap',{});
+  var key=($('cantiere').value||'').trim().toLowerCase();
+  var lu=map[key];
+  if(!lu)return;
+  var cur=($('luogo').value||'').trim();
+  // riempi solo se vuoto o se era stato messo automaticamente (non sovrascrivo cio' che scrivi a mano)
+  if(cur===''||cur===_lastAutoLuogo){
+    $('luogo').value=lu;_lastAutoLuogo=lu;
+    if(typeof autosave==='function')autosave();
+  }
+}
 function fillCantieri(){var dl=document.getElementById('cantieriList');if(!dl)return;
   dl.innerHTML=mergeUnique(LS.get('cantieriServer',[]),LS.get('cantieri',[])).map(function(v){return '<option value="'+String(v).replace(/"/g,'&quot;')+'">';}).join('');}
 function fillLuoghi(){var dl=document.getElementById('luoghiList');if(!dl)return;
@@ -403,6 +416,8 @@ async function syncFromServer(){
         });
         LS.set('cantieriServer',nomi.slice(0,800));
         LS.set('luoghiServer',luoghi.slice(0,800));
+        var map={};j2.cantieri.forEach(function(x){if(x&&x.nome&&x.luogo)map[String(x.nome).toLowerCase()]=x.luogo;});
+        LS.set('cantieriMap',map);
         fillCantieri();fillLuoghi();
       }
     }
@@ -1254,6 +1269,8 @@ function init(){
   addRow();addRow();addRow();
   fillColleghi();
   $('multiCant').addEventListener('change',e=>setMulti(e.target.checked));
+  $('cantiere').addEventListener('input',autoLuogoFromCantiere);
+  $('cantiere').addEventListener('change',autoLuogoFromCantiere);
   restoreToday();
   wireAutosave();
   $('btnAddRow').addEventListener('click',()=>addRow());
